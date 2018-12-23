@@ -1,4 +1,4 @@
--- This file uses UTF8 encoding without BOM
+п»ї-- This file uses UTF8 encoding
 
 user_menu_builder = nil
 items = nil
@@ -9,9 +9,9 @@ function register_menu_handler (user_func)
 end
 
 -- system function that is called from C side to build the menu when user Right-Clicks file(s) in Explorer
-function build_menu (...)
+function build_menu (filenames)
   -- Call user function to get list of menu items, filenames selected in Explorer are passed as argument list
-  menu = user_menu_builder ({...})
+  menu = user_menu_builder (filenames)
 
   -- Iterate menu items passing them to C function that really adds them to the menu
   items = {}
@@ -81,15 +81,18 @@ function quote(filename)
   return "\""..filename.."\""
 end
 
--- Concat arrays
+-- Concat arrays (that may contain nil values)
 function concat(table1, table2)
   local t = {}
   local t1 = table1 or {}
-  for i,v in ipairs(t1) do
-    t[i] = v
+  local t2 = table2 or {}
+  local t1n = table.maxn(t1)
+  local t2n = table.maxn(t2)
+  for i = 1,t1n do
+    t[i] = t1[i]
   end
-  for i,v in ipairs(table2 or {}) do
-    t[i+#t1] = v
+  for i = 1,t2n do
+    t[i+t1n] = t2[i]
   end
   return t
 end
@@ -109,11 +112,22 @@ end
 
 -- FreeArc-specific functions -----------------------------------------
 
--- Check for SFX
-function check_for_sfx(filename)
+-- Detect archive type by its contents
+function detect_archive_type(filename)
   -- Check that last 256 bytes of file contains sign of FreeArc footer block
   local data = read_from_file (filename, 2, -256, 256)
-  return (string.find (data, "ArC\1\8", 1, true))
+  if string.find (data, "ArC\1\8", 1, true) then
+    return "FreeArc"
+  elseif string.find (data, "PK\5\6", 1, true) then   -- or ZIP's end of central directory record
+    return "zip"
+  else
+    return false
+  end
+end
+
+-- Check for FreeArc SFX (legacy function)
+function check_for_sfx(filename)
+  return (detect_archive_type(filename)=="FreeArc")
 end
 
 -- Build multi-action FreeArc command

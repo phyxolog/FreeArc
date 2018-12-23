@@ -1,6 +1,6 @@
 {-# OPTIONS_GHC -cpp #-}
 ----------------------------------------------------------------------------------------------------
----- Информирование пользователя о ходе выполнения программы.                                 ------
+---- РРЅС„РѕСЂРјРёСЂРѕРІР°РЅРёРµ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ Рѕ С…РѕРґРµ РІС‹РїРѕР»РЅРµРЅРёСЏ РїСЂРѕРіСЂР°РјРјС‹.                                 ------
 ----------------------------------------------------------------------------------------------------
 module GUI where
 
@@ -8,7 +8,7 @@ import Prelude    hiding (catch)
 import Control.Monad
 import Control.Monad.Fix
 import Control.Concurrent
-import Control.Exception
+import Control.OldException
 import Data.Char  hiding (Control)
 import Data.IORef
 import Data.List
@@ -20,7 +20,8 @@ import System.CPUTime    (getCPUTime)
 import System.IO
 import System.Time
 
-import Graphics.UI.Gtk
+import Graphics.UI.Gtk   -- for gtk2hs 0.11: hiding (eventKeyName, eventModifier, eventWindowState, eventButton, eventClick)
+import Graphics.UI.Gtk.Gdk.Events
 import Graphics.UI.Gtk.ModelView as New
 
 import Utils
@@ -28,124 +29,127 @@ import Errors
 import Files
 import Charsets
 import FileInfo
+import Encryption (generateRandomBytes)
 import Options
 import UIBase
 
--- |Файл настроек программы
-aINI_FILE = "freearc.ini"
-
--- |Файл с описанием меню и тулбара
+-- |Р¤Р°Р№Р» СЃ РѕРїРёСЃР°РЅРёРµРј РјРµРЅСЋ Рё С‚СѓР»Р±Р°СЂР°
 aMENU_FILE = "freearc.menu"
 
--- Теги в INI-файле
+-- РўРµРіРё РІ INI-С„Р°Р№Р»Рµ
 aINITAG_LANGUAGE = "language"
 
--- |Каталог локализаций
+-- |РљР°С‚Р°Р»РѕРі Р»РѕРєР°Р»РёР·Р°С†РёР№
 aLANG_DIR = "arc.languages"
 
--- |Имя файла с иконкой программы
-aICON_FILE = "FreeArc.ico"
+-- |Р¤РёР»СЊС‚СЂС‹ РґР»СЏ РІС‹Р±РѕСЂР° Р°СЂС…РёРІР°
+aARCFILE_FILTER = ["0307 "++aFreeArc++" archives (*.arc)", "0308 Archives and SFXes (*.arc;*.exe)"]
 
--- |Фильтры для выбора архива
-aARCFILE_FILTER = ["0307 FreeArc archives (*.arc)", "0308 Archives and SFXes (*.arc;*.exe)"]
+-- РРЅС‚РµСЂС„РµР№СЃРЅС‹Рµ С‚РµРєСЃС‚С‹
+shutdown_msg         = "0479 Shutdown computer when operation completed"
+global_queueing_msg  = "0508 Queue operations across multiple FreeArc copies"
 
--- |Фильтр для выбора любого файла
+-- |Р¤РёР»СЊС‚СЂ РґР»СЏ РІС‹Р±РѕСЂР° Р»СЋР±РѕРіРѕ С„Р°Р№Р»Р°
 aANYFILE_FILTER = []
 
--- |Путь к all2arc
-all2arc_path = do
-  exe <- getExeName                              -- Name of FreeArc.exe file
-  let dir  = exe.$takeDirectory                  -- FreeArc.exe directory
-  return$ windosifyPath(dir </> "all2arc.exe")
-
--- |Локализация
+-- |Р›РѕРєР°Р»РёР·Р°С†РёСЏ (СѓСЃС‚Р°РЅРѕРІРёС‚СЊ С„Р°Р№Р» Р»РѕРєР°Р»РёР·Р°С†РёРё, РІС‹Р±СЂР°РЅС‹С‹Р№ РІ РґРёР°Р»РѕРіРµ РєРѕРЅС„РёРіСѓСЂРёСЂРѕРІР°РЅРёСЏ, РїР»СЋСЃ arc.english.txt РґР»СЏ РЅРµРїРµСЂРµРІРµРґС‘РЅРЅС‹С… tooltips)
 loadTranslation = do
   langDir  <- findDir libraryFilePlaces aLANG_DIR
   settings <- readIniFile
-  setLocale$ langDir </> (settings.$lookup aINITAG_LANGUAGE `defaultVal` aLANG_FILE)
+  setLocale [langDir </> aENGLISH_LANG_FILE
+            ,langDir </> (settings.$lookup aINITAG_LANGUAGE `defaultVal` aLANG_FILE)]
 
--- |Прочитать настройки программы из ini-файла
+-- |РџСЂРѕС‡РёС‚Р°С‚СЊ РЅР°СЃС‚СЂРѕР№РєРё РїСЂРѕРіСЂР°РјРјС‹ РёР· ini-С„Р°Р№Р»Р°
 readIniFile = do
   inifile  <- findFile configFilePlaces aINI_FILE
   inifile  &&&  readConfigFile inifile >>== map (split2 '=')
 
+-- |Left/right alignment
+data Alignment = Align___ | I___Align deriving Eq
+
 
 ----------------------------------------------------------------------------------------------------
----- Отображение индикатора прогресса --------------------------------------------------------------
+---- РћС‚РѕР±СЂР°Р¶РµРЅРёРµ РёРЅРґРёРєР°С‚РѕСЂР° РїСЂРѕРіСЂРµСЃСЃР° --------------------------------------------------------------
 ----------------------------------------------------------------------------------------------------
 
--- |Переменная, хранящая номер GUI-треда
+-- |РџРµСЂРµРјРµРЅРЅР°СЏ, С…СЂР°РЅСЏС‰Р°СЏ РЅРѕРјРµСЂ GUI-С‚СЂРµРґР°
 guiThread  =  unsafePerformIO$ newIORef$ error "undefined GUI::guiThread"
 
--- |Инициализация Gtk для интерактивной работы (режим FileManager)
+-- |РРЅРёС†РёР°Р»РёР·Р°С†РёСЏ Gtk РґР»СЏ РёРЅС‚РµСЂР°РєС‚РёРІРЅРѕР№ СЂР°Р±РѕС‚С‹ (СЂРµР¶РёРј FileManager)
 runGUI action = do
+  runInBoundThread $ do
   unsafeInitGUIForThreadedRTS
   guiThread =:: getOsThreadId
+  runLanguageDialog
   action
   mainGUI
 
--- |Инициализация Gtk для выполнения cmdline
+-- |РРЅРёС†РёР°Р»РёР·Р°С†РёСЏ Gtk РґР»СЏ РІС‹РїРѕР»РЅРµРЅРёСЏ cmdline
 startGUI = do
   x <- newEmptyMVar
-  forkIO$ runInBoundThread $ do
+  forkIO$ do
     runGUI$ putMVar x ()
   takeMVar x
 
--- |Инициализация GUI-части программы (индикатора прогресса) для выполнения cmdline
+-- |РРЅРёС†РёР°Р»РёР·Р°С†РёСЏ GUI-С‡Р°СЃС‚Рё РїСЂРѕРіСЂР°РјРјС‹ (РёРЅРґРёРєР°С‚РѕСЂР° РїСЂРѕРіСЂРµСЃСЃР°) РґР»СЏ РІС‹РїРѕР»РЅРµРЅРёСЏ cmdline
 guiStartProgram = gui $ do
   (windowProgress, msgbActions) <- runIndicators
   widgetShowAll windowProgress
 
--- |Задержать завершение программы
+-- |Р—Р°РґРµСЂР¶Р°С‚СЊ Р·Р°РІРµСЂС€РµРЅРёРµ РїСЂРѕРіСЂР°РјРјС‹
 guiPauseAtEnd = do
-  uiMessage =: ""
+  uiMessage =: ("", "")
   updateAllIndicators
+  val progressFinished >>= gui
   foreverM $ do
     sleepSeconds 1
 
--- |Завершить выполнение программы
+-- |Р—Р°РІРµСЂС€РёС‚СЊ РІС‹РїРѕР»РЅРµРЅРёРµ РїСЂРѕРіСЂР°РјРјС‹
 guiDoneProgram = do
   return ()
 
 
 {-# NOINLINE runIndicators #-}
--- |Создаёт окно индикатора прогресса и запускает тред для его периодического обновления.
+-- |РЎРѕР·РґР°С‘С‚ РѕРєРЅРѕ РёРЅРґРёРєР°С‚РѕСЂР° РїСЂРѕРіСЂРµСЃСЃР° Рё Р·Р°РїСѓСЃРєР°РµС‚ С‚СЂРµРґ РґР»СЏ РµРіРѕ РїРµСЂРёРѕРґРёС‡РµСЃРєРѕРіРѕ РѕР±РЅРѕРІР»РµРЅРёСЏ.
 runIndicators = do
   hf' <- openHistoryFile
 
-  -- Собственно окно индикатора прогресса
+  -- РЎРѕР±СЃС‚РІРµРЅРЅРѕ РѕРєРЅРѕ РёРЅРґРёРєР°С‚РѕСЂР° РїСЂРѕРіСЂРµСЃСЃР°
   window <- windowNew
   vbox   <- vBoxNew False 0
   set window [windowWindowPosition := WinPosCenter,
               containerBorderWidth := 10, containerChild := vbox]
   hfRestoreSizePos hf' window "ProgressWindow" "-10000 -10000 350 200"
 
-  -- Разделим окно по вертикали
+  -- Р Р°Р·РґРµР»РёРј РѕРєРЅРѕ РїРѕ РІРµСЂС‚РёРєР°Р»Рё
   (statsBox, updateStats, clearStats) <- createStats
   curFileLabel <- labelNew Nothing
   curFileBox   <- hBoxNew True 0
-  boxPackStart curFileBox curFileLabel PackGrow 2
+  boxPackStart curFileBox curFileLabel PackGrow 0
   widgetSetSizeRequest curFileLabel 30 (-1)
   progressBar  <- progressBarNew
-  expanderBox  <- expanderNew ""
   buttonBox    <- hBoxNew True 10
+  (expanderBox, insideExpander)  <- expander ""
   (messageBox, msgbActions) <- makeBoxForMessages
   boxPackStart vbox statsBox     PackNatural 0
   boxPackStart vbox curFileBox   PackNatural 10
   boxPackStart vbox progressBar  PackNatural 0
-  boxPackStart vbox expanderBox  PackNatural 0
+  boxPackStart vbox (widget expanderBox)  PackNatural 0
   boxPackStart vbox messageBox   PackGrow    0
   boxPackStart vbox buttonBox    PackNatural 0
-  miscSetAlignment curFileLabel 0 0    -- выровняем влево имя текущего файла
-  progressBarSetText progressBar " "   -- нужен непустой текст чтобы установить правильную высоту progressBar
+  miscSetAlignment curFileLabel 0 0    -- РІС‹СЂР°РІРЅСЏРµРј РІР»РµРІРѕ РёРјСЏ С‚РµРєСѓС‰РµРіРѕ С„Р°Р№Р»Р°
+  progressBarSetText progressBar " "   -- РЅСѓР¶РµРЅ РЅРµРїСѓСЃС‚РѕР№ С‚РµРєСЃС‚ С‡С‚РѕР±С‹ СѓСЃС‚Р°РЅРѕРІРёС‚СЊ РїСЂР°РІРёР»СЊРЅСѓСЋ РІС‹СЃРѕС‚Сѓ progressBar
 
-  hbox <- hBoxNew False 0;                            containerAdd expanderBox hbox
-  onTop <- checkBox "0446 Keep window on top";        boxPackStart hbox (widget onTop) PackNatural 1
---  let onTopSetting = settings.$lookup "OnTop" `defaultVal` "350 200"
+  expanderBox =:: hfGetHistoryBool hf' "ProgressWindow.Expanded" False
+  setOnUpdate expanderBox $   do hfReplaceHistoryBool hf' "ProgressWindow.Expanded" =<< val expanderBox
+
+  onTop <- checkBox "0446 Keep window on top";  boxPackStart insideExpander (widget onTop) PackNatural 1
   setOnUpdate onTop $   do windowSetKeepAbove window =<< val onTop
+  onTop =:: hfGetHistoryBool hf' "ProgressWindow.KeepOnTop" False
 
-  -- Заполним кнопками нижнюю часть окна
-  --buttonNew window stockClose ResponseClose
+  --shutdown <- checkBox shutdown_msg;               boxPackStart insideExpander (widget shutdown) PackNatural 1
+
+  -- Р—Р°РїРѕР»РЅРёРј РєРЅРѕРїРєР°РјРё РЅРёР¶РЅСЋСЋ С‡Р°СЃС‚СЊ РѕРєРЅР°
   backgroundButton <- buttonNewWithMnemonic       =<< i18n"0052   _Background  "
   pauseButton      <- toggleButtonNewWithMnemonic =<< i18n"0053   _Pause  "
   cancelButton     <- buttonNewWithMnemonic       =<< i18n"0081   _Cancel  "
@@ -153,24 +157,22 @@ runIndicators = do
   boxPackStart buttonBox pauseButton      PackNatural 0
   boxPackEnd   buttonBox cancelButton     PackNatural 0
 
-  -- Обработчики событий (закрытие окна/нажатие кнопок)
+  -- РћР±СЂР°Р±РѕС‚С‡РёРєРё СЃРѕР±С‹С‚РёР№ (Р·Р°РєСЂС‹С‚РёРµ РѕРєРЅР°/РЅР°Р¶Р°С‚РёРµ РєРЅРѕРїРѕРє)
   let askProgramClose = do
-        active <- val pauseButton
         terminationRequested <- do
           -- Allow to close window immediately if program already finished
           finished <- val programFinished
           if finished  then return True  else do
           -- Otherwise - ask user's permission
+          active <- val pauseButton
           (if active then id else syncUI) $ do
-             pauseTiming $ do
-               inside (windowSetKeepAbove window False)
-                      (windowSetKeepAbove window =<< val onTop)
-                      (askYesNo window "0251 Abort operation?")
+             pauseEverything$
+               askYesNo window "0251 Abort operation?"
         when terminationRequested $ do
           pauseButton =: False
           ignoreErrors$ terminateOperation
 
-  -- Обработка нажатия клавиш
+  -- РћР±СЂР°Р±РѕС‚РєР° РЅР°Р¶Р°С‚РёСЏ РєР»Р°РІРёС€
   window `onKeyPress` \event -> do
     case (eventKey event) of
       "Escape" -> do askProgramClose; return True
@@ -187,79 +189,141 @@ runIndicators = do
     active <- val pauseButton
     if active then do takeMVar mvarSyncUI
                       pause_real_secs
-                      buttonSetLabel pauseButton =<< i18n"0054   _Continue  "
+                      taskbar_Pause
+                      buttonSetLabel pauseButton =<< i18n"0054   _Resume  "
               else do putMVar mvarSyncUI "mvarSyncUI"
                       resume_real_secs
+                      taskbar_Resume
                       buttonSetLabel pauseButton =<< i18n"0053   _Pause  "
 
   backgroundButton `onClicked` do
     windowIconify window
 
-  -- Обновляем заголовок окна, статистику и надпись индикатора прогресса раз в 0.5 секунды
-  i' <- ref 0   -- а сам индикатор прогресса раз в 0.1 секунды
+  finishUpdating <- ref False    -- СѓСЃС‚Р°РЅР°РІР»РёРІР°РµС‚СЃСЏ РІ True РІ РєРѕРЅС†Рµ СЂР°Р±РѕС‚С‹ РєРѕРіРґР° РЅР°РґРѕ РїРµСЂРµСЃС‚Р°С‚СЊ РѕР±РЅРѕРІР»СЏС‚СЊ РёРЅРґРёРєР°С‚РѕСЂ РїСЂРѕРіСЂРµСЃСЃР°
+  hwnd <- ref Nothing            -- РјРµСЃС‚Рѕ РґР»СЏ СЃРѕС…СЂР°РЅРµРЅРёСЏ РІРёРЅРґРѕРІРѕРіРѕ HWND РѕРєРЅР° window
+
+  -- РћР±РЅРѕРІР»СЏРµРј Р·Р°РіРѕР»РѕРІРѕРє РѕРєРЅР°, СЃС‚Р°С‚РёСЃС‚РёРєСѓ Рё РЅР°РґРїРёСЃСЊ РёРЅРґРёРєР°С‚РѕСЂР° РїСЂРѕРіСЂРµСЃСЃР° СЂР°Р· РІ 0.5 СЃРµРєСѓРЅРґС‹
+  n' <- ref 0   -- Р° СЃР°Рј РёРЅРґРёРєР°С‚РѕСЂ РїСЂРѕРіСЂРµСЃСЃР° СЂР°Р· РІ 0.1 СЃРµРєСѓРЅРґС‹
   indicatorThread 0.1 $ \updateMode indicator indType title b bytes total processed p -> postGUIAsync$ do
-    i <- val i'; i' += 1; let once_a_halfsecond  =  (updateMode==ForceUpdate)  ||  (i `mod` 5 == 0)
-    -- Заголовок окна
-    set window [windowTitle := title]                              `on` once_a_halfsecond
-    -- Статистика
-    updateStats indType b total processed                          `on` once_a_halfsecond
-    -- Прогресс-бар и надпись на нём
-    progressBarSetFraction progressBar processed                   `on` True
-    progressBarSetText     progressBar p                           `on` once_a_halfsecond
-    widgetGrabFocus cancelButton                                   `on` (updateMode==ForceUpdate)  -- make Cancel button default after operation was finished
+    unlessM (val finishUpdating) $ do
+    n <- val n'; n' += 1; let once_a_halfsecond  =  (updateMode==ForceUpdate)  ||  (n `mod` 5 == 0)
+    -- Win7+ taskbar progress indicator
+#ifdef FREEARC_WIN
+    whenM (isNothing ==<< val hwnd) $ do
+      rnd <- encode16 ==<< generateRandomBytes 16
+      set window [windowTitle := rnd]
+      withCString rnd $ \c_rnd -> do
+      hwnd =:: Just ==<< findWindowHandleByTitle c_rnd
+    hwnd' <- val hwnd
+    taskbar_SetWindowProgressValue (fromJust hwnd') (i bytes) (i total)   `on_` True
+#endif
+    -- Р—Р°РіРѕР»РѕРІРѕРє РѕРєРЅР°
+    set window [windowTitle := title]                              `on_` once_a_halfsecond
+    -- РЎС‚Р°С‚РёСЃС‚РёРєР°
+    updateStats indType b total processed                          `on_` once_a_halfsecond
+    -- РџСЂРѕРіСЂРµСЃСЃ-Р±Р°СЂ Рё РЅР°РґРїРёСЃСЊ РЅР° РЅС‘Рј
+    progressBarSetFraction progressBar processed                   `on_` True
+    progressBarSetText     progressBar p                           `on_` once_a_halfsecond
+    widgetGrabFocus cancelButton                                   `on_` (updateMode==ForceUpdate)  -- make Cancel button default after operation was finished
 
   backgroundThread 0.5 $ \updateMode -> postGUIAsync$ do
-    -- Имя текущего файла или стадия выполнения команды
-    labelSetText curFileLabel =<< val uiMessage
+    unlessM (val finishUpdating) $ do
+    -- РРјСЏ С‚РµРєСѓС‰РµРіРѕ С„Р°Р№Р»Р° РёР»Рё СЃС‚Р°РґРёСЏ РІС‹РїРѕР»РЅРµРЅРёСЏ РєРѕРјР°РЅРґС‹ (РІС‹РІРѕРґ РїСѓСЃС‚РѕР№ СЃС‚СЂРѕРєРё РЅРµРґРѕРїСѓСЃС‚РёРј, РїРѕСЃРєРѕР»СЊРєСѓ СЌС‚Рѕ РјРµРЅСЏРµС‚ РІС‹СЃРѕС‚Сѓ РІРёРґР¶РµС‚Р°)
+    (msg,filename) <- val uiMessage;   imsg <- i18n msg
+    labelSetText curFileLabel (if imsg>""   then format imsg filename   else (filename|||" "))
 
-  -- Очищает все поля с информацией о текущем архиве
+  -- РћРїРµСЂР°С†РёСЏ, РѕС‡РёС‰Р°СЋС‰Р°СЏ РІСЃРµ РїРѕР»СЏ СЃ РёРЅС„РѕСЂРјР°С†РёРµР№ Рѕ С‚РµРєСѓС‰РµРј Р°СЂС…РёРІРµ
   clearProgressWindow =: do
     set window [windowTitle := " "]
     clearStats
-    labelSetText curFileLabel ""
+    labelSetText curFileLabel " "
     progressBarSetFraction progressBar 0
     progressBarSetText     progressBar " "
 
-  -- Поехали!
+  -- Р’С‹РїРѕР»РЅСЏРµС‚СЃСЏ РїРѕ Р·Р°РІРµСЂС€РµРЅРёРё РІСЃРµС… РѕРїРµСЂР°С†РёР№
+  progressFinished =: do
+    widgetSetSensitivity backgroundButton False
+    widgetSetSensitivity pauseButton      False
+    buttonSetLabel cancelButton =<< i18n"0470   _Close  "
+    finishUpdating =: True
+
+  progressWindow =: window
+  progressOnTop  =: onTop
+
+  -- РџРѕРµС…Р°Р»Рё!
   widgetGrabFocus pauseButton
   return (window, msgbActions)
 
 
--- |Создание полей для вывода статистики
+-- |РЎРѕР·РґР°РЅРёРµ РїРѕР»РµР№ РґР»СЏ РІС‹РІРѕРґР° СЃС‚Р°С‚РёСЃС‚РёРєРё
 createStats = do
-  textBox <- tableNew 4 6 False
-  labels' <- ref []
+  upperTable <- tableNew 1 1 False                -- upper table for stats
+  hsep       <- hSeparatorNew                     -- horizontal separator between the tables
+  lowerTable <- tableNew 1 1 False                -- lower table for stats
 
-  -- Создадим поля для вывода текущей статистики и нарисуем метки к ним
-  let newLabel2 x y s = do label1 <- labelNewWithMnemonic =<< i18n s
-                           tableAttach textBox label1 (x+0) (x+1) y (y+1) [Expand, Fill] [Expand, Fill] 0 0
-                           --set label1 [labelWidthChars := 25]
-                           miscSetAlignment label1 0 0
+  hbox <- hBoxNew False 0                         -- pack upper table into hbox in order to center table horizontally
+  boxPackStart hbox upperTable   PackRepel   0
+  vbox <- vBoxNew False 0                         -- then put both tables with separator into vertical box ...
+  boxPackStart vbox hbox         PackNatural 0
+  boxPackStart vbox hsep         PackNatural 4    -- add some space around the hor. line
+  boxPackStart vbox lowerTable   PackNatural 0
+  hbox <- hBoxNew False 0                         -- ... packed into hbox in order to center whole vbox horizontally
+  boxPackStart hbox vbox         PackRepel   0
 
-                           label2 <- labelNew Nothing
-                           tableAttach textBox label2 (x+1) (x+2) y (y+1) [Expand, Fill] [Expand, Fill] 10 0
-                           set label2 [labelSelectable := True]
-                           miscSetAlignment label2 1 0
-                           labels' ++= [label2]
-                           return [label1,label2]
-      -- Возвращает только поле значения
-      newLabel x y s  =    newLabel2 x y s >>== (!!1)
+  tableSetRowSpacings upperTable 2                -- spacing for the upper table
+  tableSetColSpacings upperTable 20
+  tableSetColSpacings lowerTable 10               -- spacing for the lower table
+  for [0,3,7] $ \x -> do                          -- insert empty fields in the lower table that fill up all unused space and provide centering of cells containing information
+    l <- labelNew Nothing
+    tableAttachDefaults lowerTable l x (x+1) 0 1
 
-  newLabel 2 0 "     "        -- make space between left and right columns
-  filesLabel      <- newLabel 0 0 "0056 Files"
-  totalFilesLabel <- newLabel 3 0 "0057 Total files"
-  bytesLabel      <- newLabel 0 1 "0058 Bytes"
-  totalBytesLabel <- newLabel 3 1 "0059 Total bytes"
-  ratioLabel      <- newLabel 0 3 "0060 Ratio"
-  speedLabel      <- newLabel 3 3 "0061 Speed"
-  timesLabel      <- newLabel 0 4 "0062 Time"
-  totalTimesLabel <- newLabel 3 4 "0063 Total time"
+  displays' <- ref []                             -- list of all displayed number fields
 
-  compressed      @ [_,      compressedLabel] <- newLabel2 0 2 "0252 Compressed"
-  totalCompressed @ [_, totalCompressedLabel] <- newLabel2 3 2 "0253 Total compressed"
+  -- РЎРѕР·РґР°С‘С‚ РЅРµРёР·РјРµРЅРЅСѓСЋ РјРµС‚РєСѓ РІ С‚Р°Р±Р»РёС†Рµ
+  let newLabel table y x width s alignment = do
+                          label <- labelNewWithMnemonic =<< i18n s
+                          tableAttach table label (x+1-width) (x+1) y (y+1) [Fill] [] 0 0
+                          miscSetAlignment label (if alignment==Align___ then 0 else 1) 0
+
+  -- РЎРѕР·РґР°С‘С‚ РІ С‚Р°Р±Р»РёС†Рµ РїРѕР»Рµ РґР»СЏ РѕС‚РѕР±СЂР°Р¶РµРЅРёСЏ РёРЅС„РѕСЂРјР°С†РёРё, РґРѕР±Р°РІР»СЏРµС‚ РµРіРѕ РІ СЃРїРёСЃРѕРє displays Рё РІРѕР·РІСЂР°С‰Р°РµС‚ РѕРїРµСЂР°С†РёСЋ РІС‹РІРѕРґР° Р·РЅР°С‡РµРЅРёСЏ РІ СЌС‚РѕРј РїРѕР»Рµ
+  let newDisplay table y x = do
+                          display <- labelNew Nothing
+                          tableAttach table display x (x+1) y (y+1) [Fill] [] 0 0
+                          set display [labelSelectable := True]
+                          miscSetAlignment display 1 0
+                          displays' ++= [display]
+                          return (labelSetMarkup display . bold)
+
+
+--               Files         Bytes     Compressed        Time
+-- Processed         8    16,188,368      6,229,876     0:00:02
+-- Total            35   134,844,601   ~ 51,893,133   ~ 0:00:17
+-- ------------------------------------------------------------
+--             Ratio 86%         Speed 16,624 kB/s
+
+  newLabel upperTable 1 0 1 "0541 Processed"     Align___
+  newLabel upperTable 2 0 1 "0542 Total"         Align___
+  newLabel upperTable 0 1 2 "0056 Files"         I___Align
+  newLabel upperTable 0 2 1 "0058 Bytes"         I___Align
+  newLabel upperTable 0 3 1 "0252 Compressed"    I___Align
+  newLabel upperTable 0 4 1 "0062 Time"          I___Align
+  newLabel lowerTable 0 1 1 "0060 Ratio"         I___Align
+  newLabel lowerTable 0 5 1 "0061 Speed"         I___Align
+
+  filesDisplay           <- newDisplay upperTable 1 1
+  totalFilesDisplay      <- newDisplay upperTable 2 1
+  bytesDisplay           <- newDisplay upperTable 1 2
+  totalBytesDisplay      <- newDisplay upperTable 2 2
+  compressedDisplay      <- newDisplay upperTable 1 3
+  totalCompressedDisplay <- newDisplay upperTable 2 3
+  timesDisplay           <- newDisplay upperTable 1 4
+  totalTimesDisplay      <- newDisplay upperTable 2 4
+  ratioDisplay           <- newDisplay lowerTable 0 2
+  speedDisplay           <- newDisplay lowerTable 0 6
+
   last_cmd' <- ref ""
 
-  -- Процедура, выводящая текущую статистику (indType==INDICATOR_FULL - полноценный индикатор, иначе - только проценты, например операции с RR)
+  -- РџСЂРѕС†РµРґСѓСЂР°, РІС‹РІРѕРґСЏС‰Р°СЏ С‚РµРєСѓС‰СѓСЋ СЃС‚Р°С‚РёСЃС‚РёРєСѓ (indType==INDICATOR_FULL - РїРѕР»РЅРѕС†РµРЅРЅС‹Р№ РёРЅРґРёРєР°С‚РѕСЂ, РёРЅР°С‡Рµ - С‚РѕР»СЊРєРѕ РїСЂРѕС†РµРЅС‚С‹, РЅР°РїСЂРёРјРµСЂ РѕРїРµСЂР°С†РёРё СЃ RR)
   let updateStats indType b total_b (processed :: Double) = do
         ~UI_State { total_files = total_files
                   , total_bytes = total_bytes
@@ -269,143 +333,220 @@ createStats = do
                   , archive_total_compressed = archive_total_compressed
                   }  <-  val ref_ui_state
         total_bytes <- return (if indType==INDICATOR_FULL  then total_bytes  else total_b)
-        -- Общее время с начала операции и момент когда начался показ текущего индикатора прогресса
+        -- РћР±С‰РµРµ РІСЂРµРјСЏ СЃ РЅР°С‡Р°Р»Р° РѕРїРµСЂР°С†РёРё Рё РјРѕРјРµРЅС‚ РєРѕРіРґР° РЅР°С‡Р°Р»СЃСЏ РїРѕРєР°Р· С‚РµРєСѓС‰РµРіРѕ РёРЅРґРёРєР°С‚РѕСЂР° РїСЂРѕРіСЂРµСЃСЃР°
         secs <- return_real_secs
         sec0 <- val indicator_start_real_secs
 
-        -- Если операция завершена - показываем точные результаты
+        -- Р•СЃР»Рё РѕРїРµСЂР°С†РёСЏ Р·Р°РІРµСЂС€РµРЅР° - РїРѕРєР°Р·С‹РІР°РµРј С‚РѕС‡РЅС‹Рµ СЂРµР·СѓР»СЊС‚Р°С‚С‹
         if b==total_bytes
-          then do (labelSetMarkup filesLabel$           ""                           )
-                  (labelSetMarkup bytesLabel$           ""                           )
-                  (labelSetMarkup compressedLabel$      ""                           )
-                  (labelSetMarkup timesLabel$           ""                           )
-                  (labelSetMarkup totalFilesLabel$      bold$ show3 total_files      )                      `on` indType==INDICATOR_FULL
-                  (labelSetMarkup totalBytesLabel$      bold$ show3 total_bytes      )
-                  (labelSetMarkup totalCompressedLabel$ bold$ show3 (cbytes)         )                      `on` indType==INDICATOR_FULL
-                  (labelSetMarkup totalTimesLabel$      bold$ showHMS (secs)         )
-                  when (b>0) $ do                      -- Поля скорости/коэф. сжатия бессмысленно показывать пока не накоплена хоть какая-то статистика
-                    (labelSetMarkup ratioLabel$         bold$ ratio2 cbytes b++"%"   )                      `on` indType==INDICATOR_FULL
+          then do (filesDisplay$           "")
+                  (bytesDisplay$           "")
+                  (compressedDisplay$      "")
+                  (timesDisplay$           "")
+                  (totalFilesDisplay$      show3 total_files)                      `on_` indType==INDICATOR_FULL
+                  (totalBytesDisplay$      show3 total_bytes)
+                  (totalCompressedDisplay$ show3 (cbytes))                         `on_` indType==INDICATOR_FULL
+                  (totalTimesDisplay$      showHMS (secs))
+                  when (b>0) $ do                      -- РџРѕР»СЏ СЃРєРѕСЂРѕСЃС‚Рё/РєРѕСЌС„. СЃР¶Р°С‚РёСЏ Р±РµСЃСЃРјС‹СЃР»РµРЅРЅРѕ РїРѕРєР°Р·С‹РІР°С‚СЊ РїРѕРєР° РЅРµ РЅР°РєРѕРїР»РµРЅР° С…РѕС‚СЊ РєР°РєР°СЏ-С‚Рѕ СЃС‚Р°С‚РёСЃС‚РёРєР°
+                    (ratioDisplay$         compression_ratio cbytes b)             `on_` indType==INDICATOR_FULL
                   when (secs-sec0>0.001) $ do
-                    (labelSetMarkup speedLabel$         bold$ showSpeed b (secs-sec0))
+                    (speedDisplay$         bold$ showSpeed b (secs-sec0))
 
           else do
 
-        -- Определение Total compressed (точное только при распаковке архива целиком, иначе - оценка)
+        -- РћРїСЂРµРґРµР»РµРЅРёРµ Total compressed (С‚РѕС‡РЅРѕРµ С‚РѕР»СЊРєРѕ РїСЂРё СЂР°СЃРїР°РєРѕРІРєРµ Р°СЂС…РёРІР° С†РµР»РёРєРѕРј, РёРЅР°С‡Рµ - РѕС†РµРЅРєР°)
         cmd <- val ref_command >>== cmd_name
         let total_compressed
               | cmdType cmd == ADD_CMD              =  if b==total_bytes then show3 (cbytes)
                                                                          else "~"++show3 (total_bytes*cbytes `div` b)
               | archive_total_bytes == total_bytes  =       show3 (archive_total_compressed)
               | archive_total_bytes == 0            =       show3 (0)
-              | otherwise                           =  "~"++show3 (archive_total_compressed*total_bytes `div` archive_total_bytes)
+              | otherwise                           =  "~"++show3 (toInteger archive_total_compressed*total_bytes `div` archive_total_bytes)
 
-        (labelSetMarkup filesLabel$           bold$ show3 files                                )  `on` indType==INDICATOR_FULL
-        (labelSetMarkup bytesLabel$           bold$ show3 b                                    )
-        (labelSetMarkup compressedLabel$      bold$ show3 cbytes                               )  `on` indType==INDICATOR_FULL
-        (labelSetMarkup timesLabel$           bold$ showHMS secs                               )
-        (labelSetMarkup totalFilesLabel$      bold$ show3 total_files                          )  `on` indType==INDICATOR_FULL
-        (labelSetMarkup totalBytesLabel$      bold$ show3 total_bytes                          )
-        when (b>0 && secs-sec0>0.001) $ do   -- Поля скорости/коэф. сжатия бессмысленно показывать пока не накоплена хоть какая-то статистика
-        (labelSetMarkup ratioLabel$           bold$ ratio2 cbytes b++"%"                       )  `on` indType==INDICATOR_FULL
-        (labelSetMarkup speedLabel$           bold$ showSpeed b (secs-sec0)                    )
-        when (processed>0.001) $ do          -- Поля оценки времени/результата сжатия показываются только после сжатия 0.1% всей информации
-        (labelSetMarkup totalCompressedLabel$ bold$ total_compressed                           )  `on` indType==INDICATOR_FULL
-        (labelSetMarkup totalTimesLabel$      bold$ "~"++showHMS (sec0 + (secs-sec0)/processed))
+        (filesDisplay$           show3 files                                )  `on_` indType==INDICATOR_FULL
+        (bytesDisplay$           show3 b                                    )
+        (compressedDisplay$      show3 cbytes                               )  `on_` indType==INDICATOR_FULL
+        (timesDisplay$           showHMS secs                               )
+        (totalFilesDisplay$      show3 total_files                          )  `on_` indType==INDICATOR_FULL
+        (totalBytesDisplay$      show3 total_bytes                          )
+        when (b>0 && secs-sec0>0.001) $ do   -- РџРѕР»СЏ СЃРєРѕСЂРѕСЃС‚Рё/РєРѕСЌС„. СЃР¶Р°С‚РёСЏ Р±РµСЃСЃРјС‹СЃР»РµРЅРЅРѕ РїРѕРєР°Р·С‹РІР°С‚СЊ РїРѕРєР° РЅРµ РЅР°РєРѕРїР»РµРЅР° С…РѕС‚СЊ РєР°РєР°СЏ-С‚Рѕ СЃС‚Р°С‚РёСЃС‚РёРєР°
+        (ratioDisplay$           compression_ratio cbytes b                 )  `on_` indType==INDICATOR_FULL
+        (speedDisplay$           showSpeed b (secs-sec0)                    )
+        when (processed>0.001) $ do          -- РџРѕР»СЏ РѕС†РµРЅРєРё РІСЂРµРјРµРЅРё/СЂРµР·СѓР»СЊС‚Р°С‚Р° СЃР¶Р°С‚РёСЏ РїРѕРєР°Р·С‹РІР°СЋС‚СЃСЏ С‚РѕР»СЊРєРѕ РїРѕСЃР»Рµ СЃР¶Р°С‚РёСЏ 0.1% РІСЃРµР№ РёРЅС„РѕСЂРјР°С†РёРё
+        (totalCompressedDisplay$ total_compressed                           )  `on_` indType==INDICATOR_FULL
+        (totalTimesDisplay$      "~"++showHMS (sec0 + (secs-sec0)/processed))
 
-  -- Процедура, очищающая текущую статистику
-  let clearStats  =  val labels' >>= mapM_ (`labelSetMarkup` "     ")
+  -- РџСЂРѕС†РµРґСѓСЂР°, РѕС‡РёС‰Р°СЋС‰Р°СЏ С‚РµРєСѓС‰СѓСЋ СЃС‚Р°С‚РёСЃС‚РёРєСѓ
+  let clearStats  =  val displays' >>= mapM_ (`labelSetMarkup` "     ")
   --
-  return (textBox, updateStats, clearStats)
+  return (hbox, updateStats, clearStats)
 
 
--- |Создадим подокно для сообщений об ошибках
+-- |РЎРѕР·РґР°РґРёРј РїРѕРґРѕРєРЅРѕ РґР»СЏ СЃРѕРѕР±С‰РµРЅРёР№ РѕР± РѕС€РёР±РєР°С…
 makeBoxForMessages = do
-  comment <- scrollableTextView "" []
-  widgetSetSizeRequest (widget comment) 0 0
+  msgbox <- scrollableTextView "" []
+  widgetSetNoShowAll (widget msgbox) True
   saved <- ref ""
-  -- Выводить errors/warnings в этот TextView
+  -- Р”РѕР±Р°РІРёС‚СЊ СЃРѕРѕР±С‰РµРЅРёРµ msg РІ msgbox (Рё РІС‹РІРµСЃС‚Рё msgbox РЅР° СЌРєСЂР°РЅ)
+  let add msg = do widgetSetNoShowAll (widget msgbox) False
+                   widgetShowAll      (widget msgbox)
+                   msgbox ++= (msg++"\n")
+  -- Р’С‹РІРѕРґРёС‚СЊ errors/warnings РІ СЌС‚РѕС‚ TextView
   let log msg = postGUIAsync$ do
                   fm <- val fileManagerMode
                   if fm
-                    then do saved ++= (msg++"\n")
-                    else do widgetSetSizeRequest (widget comment) (-1) (-1)
-                            comment ++= (msg++"\n")
-  -- После закрытия FM перенести все сообщения в этот widget
+                    then saved ++= (msg++"\n")
+                    else add msg
+  -- РџРѕСЃР»Рµ Р·Р°РєСЂС‹С‚РёСЏ FM РїРµСЂРµРЅРµСЃС‚Рё РІСЃРµ СЃРѕРѕР±С‰РµРЅРёСЏ РІ СЌС‚РѕС‚ widget
   let afterFMClose = postGUIAsync$ do
                        msg <- val saved
                        saved =: ""
                        when (msg>"") $ do
-                         widgetSetSizeRequest (widget comment) (-1) (-1)
-                         comment ++= (msg++"\n")
+                         add msg
   errorHandlers   ++= [log]
   warningHandlers ++= [log]
-  return (widget comment, (saved =: "", afterFMClose))
+  return (widget msgbox, (saved =: "", afterFMClose))
 
+
+{-# NOINLINE progressWindow #-}
+progressWindow = unsafePerformIO$ newIORef$ error "Progress windows isn't yet created" :: IORef Window
+
+{-# NOINLINE progressOnTop #-}
+progressOnTop = unsafePerformIO$ newIORef$ error "Progress windows isn't yet created" :: IORef (GtkWidget HBox Bool)
 
 {-# NOINLINE clearProgressWindow #-}
--- |Операция, очищающая окно индикатора прогресса
-clearProgressWindow = unsafePerformIO$ newIORef$ return () :: IORef (IO ())
+-- |РћРїРµСЂР°С†РёСЏ, РѕС‡РёС‰Р°СЋС‰Р°СЏ РѕРєРЅРѕ РёРЅРґРёРєР°С‚РѕСЂР° РїСЂРѕРіСЂРµСЃСЃР°
+clearProgressWindow = unsafePerformIO$ newIORef doNothing0 :: IORef (IO ())
 
--- |Вызывается в начале обработки архива
+{-# NOINLINE progressFinished #-}
+-- |РћРїРµСЂР°С†РёСЏ, РїРµСЂРµРІРѕРґСЏС‰Р°СЏ РґРёР°Р»РѕРі РїСЂРѕРіСЂРµСЃСЃР° РІ СЃРѕСЃС‚РѕСЏРЅРёРµ РѕР¶РёРґР°РЅРёСЏ Р·Р°РєСЂС‹С‚РёСЏ
+progressFinished = unsafePerformIO$ newIORef doNothing0 :: IORef (IO ())
+
+
+-- |Р’С‹Р·С‹РІР°РµС‚СЃСЏ РІ РЅР°С‡Р°Р»Рµ РѕР±СЂР°Р±РѕС‚РєРё Р°СЂС…РёРІР°
 guiStartArchive = gui$ val clearProgressWindow >>= id
 
--- |Вызывается в начале обработки файла
+-- |РћС‚РјРµС‚РёС‚СЊ РЅР°С‡Р°Р»Рѕ СѓРїР°РєРѕРІРєРё РёР»Рё СЂР°СЃРїР°РєРѕРІРєРё РґР°РЅРЅС‹С…
+guiStartProcessing = doNothing0
+
+-- |РќР°С‡Р°Р»Рѕ СЃР»РµРґСѓСЋС‰РµРіРѕ С‚РѕРјР° Р°СЂС…РёРІР°
+guiStartVolume filename = doNothing0
+
+-- |Р’С‹Р·С‹РІР°РµС‚СЃСЏ РІ РЅР°С‡Р°Р»Рµ РѕР±СЂР°Р±РѕС‚РєРё С„Р°Р№Р»Р°
 guiStartFile = doNothing0
 
--- |Приостановить вывод индикатора прогресса и стереть его следы
+-- |РўРµРєСѓС‰РёР№ РѕР±СЉС‘Рј РёСЃС…РѕРґРЅС‹С…/СЃР¶Р°С‚С‹С… РґР°РЅРЅС‹С…
+guiUpdateProgressIndicator = doNothing0
+
+-- |РџСЂРёРѕСЃС‚Р°РЅРѕРІРёС‚СЊ РІС‹РІРѕРґ РёРЅРґРёРєР°С‚РѕСЂР° РїСЂРѕРіСЂРµСЃСЃР° Рё СЃС‚РµСЂРµС‚СЊ РµРіРѕ СЃР»РµРґС‹
 uiSuspendProgressIndicator = do
   aProgressIndicatorEnabled =: False
 
--- |Возобновить вывод индикатора прогресса и вывести его текущее значение
+-- |Р’РѕР·РѕР±РЅРѕРІРёС‚СЊ РІС‹РІРѕРґ РёРЅРґРёРєР°С‚РѕСЂР° РїСЂРѕРіСЂРµСЃСЃР° Рё РІС‹РІРµСЃС‚Рё РµРіРѕ С‚РµРєСѓС‰РµРµ Р·РЅР°С‡РµРЅРёРµ
 uiResumeProgressIndicator = do
   aProgressIndicatorEnabled =: True
 
--- |Приостановить индикатор (если он запущен) на время выполнения операции
+-- |РџСЂРёРѕСЃС‚Р°РЅРѕРІРёС‚СЊ РёРЅРґРёРєР°С‚РѕСЂ (РµСЃР»Рё РѕРЅ Р·Р°РїСѓС‰РµРЅ) РЅР° РІСЂРµРјСЏ РІС‹РїРѕР»РЅРµРЅРёСЏ РѕРїРµСЂР°С†РёРё
 uiPauseProgressIndicator action =
-  bracket (do x <- val aProgressIndicatorEnabled
-              aProgressIndicatorEnabled =: False
-              return x)
-          (\x -> aProgressIndicatorEnabled =: x)
+  bracket (aProgressIndicatorEnabled <=> False)
+          (aProgressIndicatorEnabled =: )
           (\x -> action)
 
 -- |Reset console title
 resetConsoleTitle = return ()
 
+-- |РџСЂРёРѕСЃС‚Р°РЅРѕРІРёС‚СЊ РїРѕРєР°Р· РѕРєРЅР° РїСЂРѕРіСЂРµСЃСЃР° РїРѕРІРµСЂС… РІСЃРµС… РѕСЃС‚Р°Р»СЊРЅС‹С…
+pauseOnTop action = do
+  window <- val progressWindow
+  onTop  <- val progressOnTop
+  inside (windowSetKeepAbove window False)
+         (windowSetKeepAbove window =<< val onTop)
+         action
+
 -- |Pause progress indicator & timing while dialog runs
-myDialogRun dialog  =  uiPauseProgressIndicator$ pauseTiming$ dialogRun dialog
+pauseEverything  =  uiPauseProgressIndicator . pauseTiming . pauseTaskbar . pauseOnTop
 
 
 ----------------------------------------------------------------------------------------------------
----- GUI-специфичные операции с файлом истории -----------------------------------------------------
+---- GUI-СЃРїРµС†РёС„РёС‡РЅС‹Рµ РѕРїРµСЂР°С†РёРё СЃ С„Р°Р№Р»РѕРј РёСЃС‚РѕСЂРёРё -----------------------------------------------------
 ----------------------------------------------------------------------------------------------------
 
--- |Сохранить размеры и положение окна в истории
+-- |РЎРѕС…СЂР°РЅРёС‚СЊ СЂР°Р·РјРµСЂС‹ Рё РїРѕР»РѕР¶РµРЅРёРµ РѕРєРЅР° РІ РёСЃС‚РѕСЂРёРё
 hfSaveSizePos hf' window name = do
     (x,y) <- windowGetPosition window
     (w,h) <- widgetGetSize     window
     hfReplaceHistory hf' (name++"Coord") (unwords$ map show [x,y,w,h])
 
--- |Запомним, было ли окно максимизировано
+-- |Р—Р°РїРѕРјРЅРёРј, Р±С‹Р»Рѕ Р»Рё РѕРєРЅРѕ РјР°РєСЃРёРјРёР·РёСЂРѕРІР°РЅРѕ
 hfSaveMaximized hf' name = hfReplaceHistoryBool hf' (name++"Maximized")
 
--- |Восстановить размеры и положение окна из истории
+-- |Р’РѕСЃСЃС‚Р°РЅРѕРІРёС‚СЊ СЂР°Р·РјРµСЂС‹ Рё РїРѕР»РѕР¶РµРЅРёРµ РѕРєРЅР° РёР· РёСЃС‚РѕСЂРёРё
 hfRestoreSizePos hf' window name deflt = do
     coord <- hfGetHistory1 hf' (name++"Coord") deflt
     let a  = coord.$split ' '
-    when (length(a)==4  &&  all isSignedInt a) $ do  -- проверим что a состоит ровно из 4 чисел
+    when (length(a)==4  &&  all isSignedInt a) $ do  -- РїСЂРѕРІРµСЂРёРј С‡С‚Рѕ a СЃРѕСЃС‚РѕРёС‚ СЂРѕРІРЅРѕ РёР· 4 С‡РёСЃРµР»
       let [x,y,w,h] = map readSignedInt a
-      windowMove   window x y  `on` x/= -10000
-      windowResize window w h  `on` w/= -10000
+      screen <- screenGetDefault
+      scrw <- case screen of
+                Nothing -> return 999999
+                Just screen -> screenGetWidth screen
+      scrh <- case screen of
+                Nothing -> return 999999
+                Just screen -> screenGetHeight screen
+      when (x<scrw*9`div`10 && y<scrh*9`div`10 && w<scrw && h<scrh) $ do
+        windowMove   window x y  `on_` x/= -10000
+        windowResize window w h  `on_` w/= -10000
     whenM (hfGetHistoryBool hf' (name++"Maximized") False) $ do
       windowMaximize window
 
 
 ----------------------------------------------------------------------------------------------------
----- Запросы к пользователю ("Перезаписать файл?" и т.п.) ------------------------------------------
+---- Р’С‹Р±РѕСЂ СЏР·С‹РєР° РїСЂРё РїРµСЂРІРѕРј Р·Р°РїСѓСЃРєРµ GUI ------------------------------------------------------------
+----------------------------------------------------------------------------------------------------
+
+-- |Р’С‹Р±РѕСЂ СЏР·С‹РєР° РїСЂРё РїРµСЂРІРѕРј Р·Р°РїСѓСЃРєРµ GUI
+runLanguageDialog = do
+  hf'      <- openHistoryFile
+  langFile <- hfGetHistory1 hf' aINITAG_LANGUAGE ""
+  when (langFile=="") $ do
+    -- РЎРѕР·РґР°РґРёРј РґРёР°Р»РѕРі СЃРѕ СЃС‚Р°РЅРґР°СЂС‚РЅС‹РјРё РєРЅРѕРїРєР°РјРё OK/Cancel
+    let question = "Please select your language (you may change language later in Settings dialog)"
+    bracketCtrlBreak "LanguageDialog" (messageDialogNew Nothing [] MessageOther ButtonsOkCancel question) widgetDestroy $ \dialog -> do
+    set dialog [windowTitle          := aFreeArc++": select your language",
+                windowWindowPosition := WinPosCenter]
+
+    -- Р—Р°РїРѕР»РЅРёС‚СЊ СЃРїРёСЃРѕРє СЏР·С‹РєРѕРІ РёРјРµРЅР°РјРё С„Р°Р№Р»РѕРІ РІ РєР°С‚Р°Р»РѕРіРµ arc.languages Рё РІС‹Р±СЂР°С‚СЊ English РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ
+    langDir   <- findDir libraryFilePlaces aLANG_DIR
+    langFiles <- langDir &&& (dir_list langDir >>== map baseName >>== sort >>== filter (match "arc.*.txt"))
+    langComboBox <- New.comboBoxNewText
+    for langFiles (New.comboBoxAppendText langComboBox . mapHead toUpper . replace '_' ' ' . dropEnd 4 . drop 4)
+    whenJust (langFiles.$ findIndex ((=="arc.english.txt").map toLower)) (New.comboBoxSetActive langComboBox)
+
+    upbox <- dialogGetUpper dialog
+    boxPackStart  upbox langComboBox PackGrow 0
+    widgetShowAll upbox
+
+    -- РћРїСЂРµРґРµР»РёС‚СЊ С„Р°Р№Р» Р»РѕРєР°Р»РёР·Р°С†РёРё, СЃРѕРѕС‚РІРµС‚СЃС‚РІСѓСЋС‰РёР№ РІС‹Р±СЂР°РЅРЅРѕРјСѓ РІ РєРѕРјР±РѕР±РѕРєСЃРµ СЏР·С‹РєСѓ
+    let getCurrentLangFile = do
+          lang <- New.comboBoxGetActive langComboBox
+          case lang of
+            -1   -> return ""
+            lang -> myCanonicalizePath (langDir </> (langFiles !! lang))
+
+    choice <- dialogRun dialog
+    when (choice==ResponseOk) $ do
+      langFile <- getCurrentLangFile
+      hfReplaceHistory hf' aINITAG_LANGUAGE (takeFileName langFile)
+      loadTranslation
+      writeShellExtScript hf'
+
+
+----------------------------------------------------------------------------------------------------
+---- Р—Р°РїСЂРѕСЃС‹ Рє РїРѕР»СЊР·РѕРІР°С‚РµР»СЋ ("РџРµСЂРµР·Р°РїРёСЃР°С‚СЊ С„Р°Р№Р»?" Рё С‚.Рї.) ------------------------------------------
 ----------------------------------------------------------------------------------------------------
 
 {-# NOINLINE askOverwrite #-}
--- |Запрос о перезаписи файла
+-- |Р—Р°РїСЂРѕСЃ Рѕ РїРµСЂРµР·Р°РїРёСЃРё С„Р°Р№Р»Р°
 askOverwrite filename diskFileSize diskFileTime arcfile ref_answer answer_on_u = do
   (title:file:question) <- i18ns ["0078 Confirm File Replace",
                                   "0165 %1\n%2 bytes\nmodified on %3",
@@ -425,7 +566,7 @@ askOverwrite filename diskFileSize diskFileTime arcfile ref_answer answer_on_u =
       f2 = formatn file [storedName arcfile, show3$ fiSize arcfile, formatDateTime$ fiTime arcfile]
   ask (format title filename) (formatn (joinWith "\n" question) [f1,f2]) ref_answer answer_on_u
 
--- |Общий механизм для выдачи запросов к пользователю
+-- |РћР±С‰РёР№ РјРµС…Р°РЅРёР·Рј РґР»СЏ РІС‹РґР°С‡Рё Р·Р°РїСЂРѕСЃРѕРІ Рє РїРѕР»СЊР·РѕРІР°С‚РµР»СЋ
 ask title question ref_answer answer_on_u =  do
   old_answer <- val ref_answer
   new_answer <- case old_answer of
@@ -438,20 +579,20 @@ ask title question ref_answer answer_on_u =  do
     "u" -> return answer_on_u
     _   -> return (new_answer `elem` ["y","a"])
 
--- |Собственно общение с пользователем происходит здесь
+-- |РЎРѕР±СЃС‚РІРµРЅРЅРѕ РѕР±С‰РµРЅРёРµ СЃ РїРѕР»СЊР·РѕРІР°С‚РµР»РµРј РїСЂРѕРёСЃС…РѕРґРёС‚ Р·РґРµСЃСЊ
 ask_user title question  =  gui $ do
-  -- Создадим диалог
+  -- РЎРѕР·РґР°РґРёРј РґРёР°Р»РѕРі
   bracketCtrlBreak "ask_user" (messageDialogNew Nothing [] MessageQuestion ButtonsNone question) widgetDestroy $ \dialog -> do
   set dialog [windowTitle          := title,
               windowWindowPosition := WinPosCenter]
 {-
-  -- Запрос к пользователю
+  -- Р—Р°РїСЂРѕСЃ Рє РїРѕР»СЊР·РѕРІР°С‚РµР»СЋ
   upbox <- dialogGetUpper dialog
   label <- labelNew$ Just$ question++"?"
   boxPackStart  upbox label PackGrow 0
   widgetShowAll upbox
 -}
-  -- Кнопки для всех возможных ответов
+  -- РљРЅРѕРїРєРё РґР»СЏ РІСЃРµС… РІРѕР·РјРѕР¶РЅС‹С… РѕС‚РІРµС‚РѕРІ
   hbox <- dialogGetActionArea dialog
   buttonBox <- tableNew 3 3 True
   boxPackStart hbox buttonBox PackGrow 0
@@ -466,34 +607,34 @@ ask_user title question  =  gui $ do
       dialogAddActionWidget dialog button (ResponseUser id)
   widgetShowAll hbox
 
-  -- Получить ответ в виде буквы: y/n/a/...
-  (ResponseUser id) <- myDialogRun dialog
+  -- РџРѕР»СѓС‡РёС‚СЊ РѕС‚РІРµС‚ РІ РІРёРґРµ Р±СѓРєРІС‹: y/n/a/...
+  (ResponseUser id) <- pauseEverything$ dialogRun dialog
   let answer = (split '/' valid_answers) !! (id-1)
   when (answer=="q") $ do
     terminateOperation
   return answer
 
 
--- Ответы, возвращаемые ask_user, и соответствующие им надписи на кнопках, построчно
+-- РћС‚РІРµС‚С‹, РІРѕР·РІСЂР°С‰Р°РµРјС‹Рµ ask_user, Рё СЃРѕРѕС‚РІРµС‚СЃС‚РІСѓСЋС‰РёРµ РёРј РЅР°РґРїРёСЃРё РЅР° РєРЅРѕРїРєР°С…, РїРѕСЃС‚СЂРѕС‡РЅРѕ
 valid_answers = "y/n/q/a/s/u"
 buttons       = ["0079 _Yes/0080 _No/0081 _Cancel"
                 ,"0082 Yes to _All/0083 No to A_ll/0084 _Update all"]
 
 
 ----------------------------------------------------------------------------------------------------
----- Запрос паролей --------------------------------------------------------------------------------
+---- Р—Р°РїСЂРѕСЃ РїР°СЂРѕР»РµР№ --------------------------------------------------------------------------------
 ----------------------------------------------------------------------------------------------------
 
--- |Запрос пароля при шифровании/дешифровании. Используется невидимый ввод.
--- При шифровании пароль надо ввести дважды - для защиты от ошибок при вводе
+-- |Р—Р°РїСЂРѕСЃ РїР°СЂРѕР»СЏ РїСЂРё С€РёС„СЂРѕРІР°РЅРёРё/РґРµС€РёС„СЂРѕРІР°РЅРёРё. РСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ РЅРµРІРёРґРёРјС‹Р№ РІРІРѕРґ.
+-- РџСЂРё С€РёС„СЂРѕРІР°РЅРёРё РїР°СЂРѕР»СЊ РЅР°РґРѕ РІРІРµСЃС‚Рё РґРІР°Р¶РґС‹ - РґР»СЏ Р·Р°С‰РёС‚С‹ РѕС‚ РѕС€РёР±РѕРє РїСЂРё РІРІРѕРґРµ
 ask_passwords = ( ask_password_dialog "0076 Enter encryption password" 2
                 , ask_password_dialog "0077 Enter decryption password" 1
-                , doNothing0   -- вызывается при неправильном пароле
+                , doNothing0 :: IO ()  -- РІС‹Р·С‹РІР°РµС‚СЃСЏ РїСЂРё РЅРµРїСЂР°РІРёР»СЊРЅРѕРј РїР°СЂРѕР»Рµ
                 )
 
--- |Диалог запроса пароля.
+-- |Р”РёР°Р»РѕРі Р·Р°РїСЂРѕСЃР° РїР°СЂРѕР»СЏ.
 ask_password_dialog title' amount opt_parseData = gui $ do
-  -- Создадим диалог со стандартными кнопками OK/Cancel
+  -- РЎРѕР·РґР°РґРёРј РґРёР°Р»РѕРі СЃРѕ СЃС‚Р°РЅРґР°СЂС‚РЅС‹РјРё РєРЅРѕРїРєР°РјРё OK/Cancel
   bracketCtrlBreak "ask_password_dialog" dialogNew widgetDestroy $ \dialog -> do
   title <- i18n title'
   set dialog [windowTitle          := title,
@@ -501,25 +642,24 @@ ask_password_dialog title' amount opt_parseData = gui $ do
   okButton <- addStdButton dialog ResponseOk
   addStdButton dialog ResponseCancel
 
-  -- Создаёт таблицу с полями для ввода одного или двух паролей
+  -- РЎРѕР·РґР°С‘С‚ С‚Р°Р±Р»РёС†Сѓ СЃ РїРѕР»СЏРјРё РґР»СЏ РІРІРѕРґР° РѕРґРЅРѕРіРѕ РёР»Рё РґРІСѓС… РїР°СЂРѕР»РµР№
   (pwdTable, pwds@[pwd1,pwd2]) <- pwdBox amount
-  -- Процедура прверки правильности введённых паролей
+  -- РџСЂРѕС†РµРґСѓСЂР° РїСЂРІРµСЂРєРё РїСЂР°РІРёР»СЊРЅРѕСЃС‚Рё РІРІРµРґС‘РЅРЅС‹С… РїР°СЂРѕР»РµР№
   let validate = do [pwd1', pwd2'] <- mapM val pwds
                     return (pwd1'>"" && pwd1'==pwd2')
   for pwds (`onEntryActivate` whenM validate (buttonClicked okButton))
-  for pwds $ flip afterKeyRelease $ \e -> do
-    validate >>= widgetSetSensitivity okButton
-    return False
+  for pwds $ \pwd -> do
+    pwd `onEditableChanged` (validate >>= widgetSetSensitivity okButton)
   okButton `widgetSetSensitivity` False
 
-  -- Добавим пробелы вокруг таблицы и кинем её на форму
+  -- Р”РѕР±Р°РІРёРј РїСЂРѕР±РµР»С‹ РІРѕРєСЂСѓРі С‚Р°Р±Р»РёС†С‹ Рё РєРёРЅРµРј РµС‘ РЅР° С„РѕСЂРјСѓ
   set pwdTable [containerBorderWidth := 10]
   upbox <- dialogGetUpper dialog
   boxPackStart  upbox pwdTable PackGrow 0
   widgetShowAll upbox
 
   fix $ \reenter -> do
-  choice <- myDialogRun dialog
+  choice <- pauseEverything$ dialogRun dialog
   if choice==ResponseOk
     then do ok <- validate
             if ok  then val pwd1  else reenter
@@ -528,15 +668,15 @@ ask_password_dialog title' amount opt_parseData = gui $ do
 
 {-# NOINLINE ask_passwords #-}
 
--- |Создаёт таблицу с полями для ввода одного или двух паролей
+-- |РЎРѕР·РґР°С‘С‚ С‚Р°Р±Р»РёС†Сѓ СЃ РїРѕР»СЏРјРё РґР»СЏ РІРІРѕРґР° РѕРґРЅРѕРіРѕ РёР»Рё РґРІСѓС… РїР°СЂРѕР»РµР№
 pwdBox amount = do
   pwdTable <- tableNew 2 amount False
   tableSetColSpacings pwdTable 0
-  let newField y s = do -- Надписи в левом столбце
+  let newField y s = do -- РќР°РґРїРёСЃРё РІ Р»РµРІРѕРј СЃС‚РѕР»Р±С†Рµ
                         label <- labelNewWithMnemonic =<< i18n s
                         tableAttach pwdTable label 0 1 (y-1) y [Fill] [Expand, Fill] 5 0
                         miscSetAlignment label 0 0.5
-                        -- Поля ввода пароля в правом столбце
+                        -- РџРѕР»СЏ РІРІРѕРґР° РїР°СЂРѕР»СЏ РІ РїСЂР°РІРѕРј СЃС‚РѕР»Р±С†Рµ
                         pwd <- entryNew
                         set pwd [entryVisibility := False, entryActivatesDefault := True]
                         tableAttach pwdTable pwd 1 2 (y-1) y [Expand, Shrink, Fill] [Expand, Fill] 5 0
@@ -547,7 +687,7 @@ pwdBox amount = do
 
 
 ----------------------------------------------------------------------------------------------------
----- Ввод/вывод комментариев к архиву  -------------------------------------------------------------
+---- Р’РІРѕРґ/РІС‹РІРѕРґ РєРѕРјРјРµРЅС‚Р°СЂРёРµРІ Рє Р°СЂС…РёРІСѓ  -------------------------------------------------------------
 ----------------------------------------------------------------------------------------------------
 
 {-# NOINLINE uiPrintArcComment #-}
@@ -568,17 +708,17 @@ uiInputArcComment old_comment = gui$ do
   boxPackStart upbox commentTextView PackGrow 10
   widgetShowAll upbox
 
-  choice <- myDialogRun dialog
+  choice <- pauseEverything$ dialogRun dialog
   if choice==ResponseOk
     then textViewGetText commentTextView
     else terminateOperation >> return ""
 
 
 ----------------------------------------------------------------------------------------------------
----- Библиотека ------------------------------------------------------------------------------------
+---- Р‘РёР±Р»РёРѕС‚РµРєР° ------------------------------------------------------------------------------------
 ----------------------------------------------------------------------------------------------------
 
--- |Выполнить операцию в GUI-треде
+-- |Р’С‹РїРѕР»РЅРёС‚СЊ РѕРїРµСЂР°С†РёСЋ РІ GUI-С‚СЂРµРґРµ
 gui action = do
   gui <- val guiThread
   my  <- getOsThreadId
@@ -588,15 +728,15 @@ gui action = do
   whenJustM (val x) throwIO
   return y
 
--- |Глобальная переменная, хранящая тултипы контролов на текущей форме
+-- |Р“Р»РѕР±Р°Р»СЊРЅР°СЏ РїРµСЂРµРјРµРЅРЅР°СЏ, С…СЂР°РЅСЏС‰Р°СЏ С‚СѓР»С‚РёРїС‹ РєРѕРЅС‚СЂРѕР»РѕРІ РЅР° С‚РµРєСѓС‰РµР№ С„РѕСЂРјРµ
 tooltips :: IORef Tooltips = unsafePerformIO$ ref$ error "undefined GUI::tooltips"
 tooltip w s = do s <- i18n s; t <- val tooltips; tooltipsSetTip t w s ""
 
--- |Создать контрол, дав ему локализованную надпись и тултип
+-- |РЎРѕР·РґР°С‚СЊ РєРѕРЅС‚СЂРѕР», РґР°РІ РµРјСѓ Р»РѕРєР°Р»РёР·РѕРІР°РЅРЅСѓСЋ РЅР°РґРїРёСЃСЊ Рё С‚СѓР»С‚РёРї
 i18t title create = do
   (label, t) <- i18n' title
   control <- create label
-  tooltip control t  `on`  t/=""
+  tooltip control t  `on_`  t/=""
   return control
 
 -- |This instance allows to get/set radio button state using standard =:/val interface
@@ -676,24 +816,24 @@ instance GtkWidgetClass (GtkWidget gw a) gw a where
   saveHistory   = gwSaveHistory
   rereadHistory = gwRereadHistory
 
--- |Пустой GtkWidget
+-- |РџСѓСЃС‚РѕР№ GtkWidget
 gtkWidget = GtkWidget { gwWidget        = undefined
                       , gwGetTitle      = undefined
                       , gwSetTitle      = undefined
                       , gwGetValue      = undefined
-                      , gwSetValue      = undefined
+                      , gwSetValue      = \_ -> return ()
                       , gwSetOnUpdate   = undefined
                       , gwOnClick       = undefined
                       , gwSaveHistory   = undefined
                       , gwRereadHistory = undefined
                       }
 
--- Использовать жирный Pango Markup для переданного текста
+-- РСЃРїРѕР»СЊР·РѕРІР°С‚СЊ Р¶РёСЂРЅС‹Р№ Pango Markup РґР»СЏ РїРµСЂРµРґР°РЅРЅРѕРіРѕ С‚РµРєСЃС‚Р°
 bold text = "<b>"++text++"</b>"
 
 
 {-# NOINLINE eventKey #-}
--- |Возвращает полное имя клавиши, например <Alt><Ctrl>M
+-- |Р’РѕР·РІСЂР°С‰Р°РµС‚ РїРѕР»РЅРѕРµ РёРјСЏ РєР»Р°РІРёС€Рё, РЅР°РїСЂРёРјРµСЂ <Alt><Ctrl>M
 eventKey (Key {eventKeyName = name, eventModifier = modifier}) =
   let mshow Shift   = "<Shift>"
       mshow Control = "<Ctrl>"
@@ -704,7 +844,7 @@ eventKey (Key {eventKeyName = name, eventModifier = modifier}) =
 
 
 {-# NOINLINE addStdButton #-}
--- |Добавить к диалогу стандартную кнопку со стандартной иконкой
+-- |Р”РѕР±Р°РІРёС‚СЊ Рє РґРёР°Р»РѕРіСѓ СЃС‚Р°РЅРґР°СЂС‚РЅСѓСЋ РєРЅРѕРїРєСѓ СЃРѕ СЃС‚Р°РЅРґР°СЂС‚РЅРѕР№ РёРєРѕРЅРєРѕР№
 addStdButton dialog responseId = do
   let (emsg,item) = case responseId of
                       ResponseYes            -> ("0079 _Yes",    stockYes         )
@@ -712,56 +852,56 @@ addStdButton dialog responseId = do
                       ResponseOk             -> ("0362 _OK",     stockOk          )
                       ResponseCancel         -> ("0081 _Cancel", stockCancel      )
                       ResponseClose          -> ("0364 _Close",  stockClose       )
-                      x | x==aResponseMyYes  -> ("0079 _Yes",    stockYes         )
-                      x | x==aResponseMyOk   -> ("0362 _OK",     stockOk          )
                       x | x==aResponseDetach -> ("0432 _Detach", stockMissingImage)
                       _                      -> ("???",          stockMissingImage)
   msg <- i18n emsg
   button <- dialogAddButton dialog msg responseId
-  image  <- imageNewFromStock item iconSizeButton
+#if defined(FREEARC_UNIX)
+  hbox <- dialogGetActionArea dialog
+  boxReorderChild hbox button 0        -- according to HIG, on Linux dialogs should have reverse button order compared to Windows
+#endif
+  image  <- imageNewFromStock item IconSizeButton
   buttonSetImage button image
   return button
 
-aResponseMyYes  = ResponseUser 1
-aResponseMyOk   = ResponseUser 2
--- |Кнопка фонового выполнения команды
-aResponseDetach = ResponseUser 3
+-- |РљРЅРѕРїРєР° С„РѕРЅРѕРІРѕРіРѕ РІС‹РїРѕР»РЅРµРЅРёСЏ РєРѕРјР°РЅРґС‹
+aResponseDetach = ResponseUser 1
 
 
 {-# NOINLINE debugMsg #-}
--- |Диалог с отладочным сообщением
+-- |Р”РёР°Р»РѕРі СЃ РѕС‚Р»Р°РґРѕС‡РЅС‹Рј СЃРѕРѕР±С‰РµРЅРёРµРј
 debugMsg msg = do
   bracketCtrlBreak "debugMsg" (messageDialogNew (Nothing) [] MessageError ButtonsClose msg) widgetDestroy $ \dialog -> do
   dialogRun dialog
   return ()
 
--- |Диалог с информационным сообщением
+-- |Р”РёР°Р»РѕРі СЃ РёРЅС„РѕСЂРјР°С†РёРѕРЅРЅС‹Рј СЃРѕРѕР±С‰РµРЅРёРµРј
 msgBox window dialogType msg  =  askConfirmation [ResponseClose] window msg  >>  return ()
 
--- |Запросить у пользователя подтверждение операции
+-- |Р—Р°РїСЂРѕСЃРёС‚СЊ Сѓ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ РїРѕРґС‚РІРµСЂР¶РґРµРЅРёРµ РѕРїРµСЂР°С†РёРё
 askOkCancel = askConfirmation [ResponseOk,  ResponseCancel]
 askYesNo    = askConfirmation [ResponseYes, ResponseNo]
 {-# NOINLINE askConfirmation #-}
 askConfirmation buttons window msg = do
-  -- Создадим диалог с единственной кнопкой Close
+  -- РЎРѕР·РґР°РґРёРј РґРёР°Р»РѕРі СЃ РµРґРёРЅСЃС‚РІРµРЅРЅРѕР№ РєРЅРѕРїРєРѕР№ Close
   bracketCtrlBreak "askConfirmation" dialogNew widgetDestroy $ \dialog -> do
     set dialog [windowTitle        := aARC_NAME,
                 windowTransientFor := window,
                 containerBorderWidth := 10]
     mapM_ (addStdButton dialog) buttons
-    -- Напечатаем в нём сообщение
+    -- РќР°РїРµС‡Р°С‚Р°РµРј РІ РЅС‘Рј СЃРѕРѕР±С‰РµРЅРёРµ
     label <- labelNew.Just =<< i18n msg
     upbox <- dialogGetUpper dialog
     label `set` [labelWrap := True]
     boxPackStart  upbox label PackGrow 20
     widgetShowAll upbox
-    -- И запустим
+    -- Р Р·Р°РїСѓСЃС‚РёРј
     dialogRun dialog >>== (==buttons!!0)
 
 {-# NOINLINE inputString #-}
--- |Запросить у пользователя строку
+-- |Р—Р°РїСЂРѕСЃРёС‚СЊ Сѓ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ СЃС‚СЂРѕРєСѓ
 inputString window msg = do
-  -- Создадим диалог со стандартными кнопками OK/Cancel
+  -- РЎРѕР·РґР°РґРёРј РґРёР°Р»РѕРі СЃРѕ СЃС‚Р°РЅРґР°СЂС‚РЅС‹РјРё РєРЅРѕРїРєР°РјРё OK/Cancel
   bracketCtrlBreak "inputString" dialogNew widgetDestroy $ \dialog -> do
     set dialog [windowTitle        := msg,
                 windowTransientFor := window]
@@ -784,7 +924,7 @@ inputString window msg = do
 
 
 {-# NOINLINE boxed #-}
--- |Создать control и поместить его в hbox
+-- |РЎРѕР·РґР°С‚СЊ control Рё РїРѕРјРµСЃС‚РёС‚СЊ РµРіРѕ РІ hbox
 boxed makeControl title = do
   hbox    <- hBoxNew False 0
   control <- makeControl .$i18t title
@@ -793,13 +933,15 @@ boxed makeControl title = do
 
 
 {-# NOINLINE label #-}
--- |Метка
-label title   =  do (hbox, _) <- boxed labelNewWithMnemonic title
-                    return gtkWidget {gwWidget = hbox}
+-- |РњРµС‚РєР°
+label title = do
+  (hbox, _) <- boxed labelNewWithMnemonic title
+  return gtkWidget { gwWidget      = hbox
+                   }
 
 
 {-# NOINLINE button #-}
--- |Кнопка
+-- |РљРЅРѕРїРєР°
 button title  =  do
   (hbox, control) <- boxed buttonNewWithMnemonic title
   return gtkWidget { gwWidget   = hbox
@@ -810,7 +952,7 @@ button title  =  do
 
 
 {-# NOINLINE checkBox #-}
--- |Чекбокс
+-- |Р§РµРєР±РѕРєСЃ
 checkBox title = do
   (hbox, control) <- boxed checkButtonNewWithMnemonic title
   return gtkWidget { gwWidget      = hbox
@@ -821,20 +963,21 @@ checkBox title = do
 
 
 {-# NOINLINE expander #-}
--- |Экспандер
+-- |Р­РєСЃРїР°РЅРґРµСЂ
 expander title = do
   (hbox, control) <- boxed expanderNewWithMnemonic title
-  inner_hbox <- hBoxNew False 0    -- We should return it too in order to allow inserting controls inside Expander!!!
-  containerAdd control inner_hbox
-  return gtkWidget { gwWidget      = hbox
-                   , gwGetValue    = val control
-                   , gwSetValue    = (control=:)
---                   , gwSetOnUpdate = \action -> onToggled control action >> return ()
-                   }
+  innerBox <- vBoxNew False 0
+  containerAdd control innerBox
+  return (gtkWidget { gwWidget      = hbox
+                    , gwGetValue    = val control
+                    , gwSetValue    = (control=:)
+                    , gwSetOnUpdate = \action -> onSizeAllocate control (\size -> action)  >> return ()
+                    }
+         ,innerBox)
 
 
 {-# NOINLINE comboBox #-}
--- |Создаёт комбобокс, содержащий заданный набор альтернатив
+-- |РЎРѕР·РґР°С‘С‚ РєРѕРјР±РѕР±РѕРєСЃ, СЃРѕРґРµСЂР¶Р°С‰РёР№ Р·Р°РґР°РЅРЅС‹Р№ РЅР°Р±РѕСЂ Р°Р»СЊС‚РµСЂРЅР°С‚РёРІ
 comboBox title labels = do
   hbox  <- hBoxNew False 0
   label <- labelNewWithMnemonic .$i18t title
@@ -842,22 +985,23 @@ comboBox title labels = do
   for labels (\l -> New.comboBoxAppendText combo =<< i18n l)
   boxPackStart  hbox  label  PackNatural 5
   boxPackStart  hbox  combo  PackGrow    5
-  widgetSetSizeRequest combo 10 (-1)           -- уменьшим размер кобо-бокса, посольку иначе диалог сжатия становится слишком широк
+  widgetSetSizeRequest combo 10 (-1)           -- СѓРјРµРЅСЊС€РёРј СЂР°Р·РјРµСЂ РєРѕР±Рѕ-Р±РѕРєСЃР°, РїРѕСЃРѕР»СЊРєСѓ РёРЅР°С‡Рµ РґРёР°Р»РѕРі СЃР¶Р°С‚РёСЏ СЃС‚Р°РЅРѕРІРёС‚СЃСЏ СЃР»РёС€РєРѕРј С€РёСЂРѕРє
   return gtkWidget { gwWidget      = hbox
-                   , gwGetValue    = New.comboBoxGetActive combo >>== fromMaybe 0
+                   , gwGetValue    = New.comboBoxGetActive combo
                    , gwSetValue    = New.comboBoxSetActive combo
+                   , gwSetOnUpdate = \action -> on combo changed action  >> return ()
                    }
 
 
 {-# NOINLINE simpleComboBox #-}
--- |Создаёт комбобокс, содержащий заданный набор альтернатив
+-- |РЎРѕР·РґР°С‘С‚ РєРѕРјР±РѕР±РѕРєСЃ, СЃРѕРґРµСЂР¶Р°С‰РёР№ Р·Р°РґР°РЅРЅС‹Р№ РЅР°Р±РѕСЂ Р°Р»СЊС‚РµСЂРЅР°С‚РёРІ
 simpleComboBox labels = do
   combo <- New.comboBoxNewText
   for labels (New.comboBoxAppendText combo)
   return combo
 
 {-# NOINLINE makePopupMenu #-}
--- |Создаёт popup menu
+-- |РЎРѕР·РґР°С‘С‚ popup menu
 makePopupMenu action labels = do
   m <- menuNew
   mapM_ (mkitem m) labels
@@ -871,21 +1015,21 @@ makePopupMenu action labels = do
 
 
 {-# NOINLINE radioFrame #-}
--- |Создаёт фрейм, содержащий набор радиокнопок и возвращает этот фрейм
---  плюс процедуру для чтения текущей выбранной кнопки
+-- |РЎРѕР·РґР°С‘С‚ С„СЂРµР№Рј, СЃРѕРґРµСЂР¶Р°С‰РёР№ РЅР°Р±РѕСЂ СЂР°РґРёРѕРєРЅРѕРїРѕРє Рё РІРѕР·РІСЂР°С‰Р°РµС‚ СЌС‚РѕС‚ С„СЂРµР№Рј
+--  РїР»СЋСЃ РїСЂРѕС†РµРґСѓСЂСѓ РґР»СЏ С‡С‚РµРЅРёСЏ С‚РµРєСѓС‰РµР№ РІС‹Р±СЂР°РЅРЅРѕР№ РєРЅРѕРїРєРё
 radioFrame title (label1:labels) = do
-  -- Создать радио-кнопки, объединив их в одну группу
+  -- РЎРѕР·РґР°С‚СЊ СЂР°РґРёРѕ-РєРЅРѕРїРєРё, РѕР±СЉРµРґРёРЅРёРІ РёС… РІ РѕРґРЅСѓ РіСЂСѓРїРїСѓ
   radio1 <- radioButtonNewWithMnemonic .$i18t label1
   radios <- mapM (\title -> radioButtonNewWithMnemonicFromWidget radio1 .$i18t title) labels
   let buttons = radio1:radios
-  -- Упаковать их вертикально и заставить выполнять событие, запомненное в переменной onChanged
+  -- РЈРїР°РєРѕРІР°С‚СЊ РёС… РІРµСЂС‚РёРєР°Р»СЊРЅРѕ Рё Р·Р°СЃС‚Р°РІРёС‚СЊ РІС‹РїРѕР»РЅСЏС‚СЊ СЃРѕР±С‹С‚РёРµ, Р·Р°РїРѕРјРЅРµРЅРЅРѕРµ РІ РїРµСЂРµРјРµРЅРЅРѕР№ onChanged
   vbox <- vBoxNew False 0
   onChanged <- ref doNothing0
   for buttons $ \button -> do boxPackStart vbox button PackNatural 0
                               button `onToggled` do
                                 whenM (val button) $ do
                                   val onChanged >>= id
-  -- Создать рамочку вокруг кнопок
+  -- РЎРѕР·РґР°С‚СЊ СЂР°РјРѕС‡РєСѓ РІРѕРєСЂСѓРі РєРЅРѕРїРѕРє
   frame <- i18t title $ \title -> do
              frame <- frameNew
              set frame [frameLabel := title.$ deleteIf (=='_'), containerChild := vbox]
@@ -898,34 +1042,34 @@ radioFrame title (label1:labels) = do
 
 
 {-# NOINLINE twoColumnTable #-}
--- |Двухколоночная таблица, отображающая заданные метки+данные
+-- |Р”РІСѓС…РєРѕР»РѕРЅРѕС‡РЅР°СЏ С‚Р°Р±Р»РёС†Р°, РѕС‚РѕР±СЂР°Р¶Р°СЋС‰Р°СЏ Р·Р°РґР°РЅРЅС‹Рµ РјРµС‚РєРё+РґР°РЅРЅС‹Рµ
 twoColumnTable dataset = do
   (table, setLabels) <- emptyTwoColumnTable$ map fst dataset
   zipWithM_ ($) setLabels (map snd dataset)
   return table
 
 {-# NOINLINE emptyTwoColumnTable #-}
--- |Двухколоночная таблица: принимает список меток для левой колонки
--- и возвращает список операций setLabels для помещения данных во вторую колонку
+-- |Р”РІСѓС…РєРѕР»РѕРЅРѕС‡РЅР°СЏ С‚Р°Р±Р»РёС†Р°: РїСЂРёРЅРёРјР°РµС‚ СЃРїРёСЃРѕРє РјРµС‚РѕРє РґР»СЏ Р»РµРІРѕР№ РєРѕР»РѕРЅРєРё
+-- Рё РІРѕР·РІСЂР°С‰Р°РµС‚ СЃРїРёСЃРѕРє РѕРїРµСЂР°С†РёР№ setLabels РґР»СЏ РїРѕРјРµС‰РµРЅРёСЏ РґР°РЅРЅС‹С… РІРѕ РІС‚РѕСЂСѓСЋ РєРѕР»РѕРЅРєСѓ
 emptyTwoColumnTable dataset = do
   table <- tableNew (length dataset) 2 False
-  -- Создадим поля для вывода текущей статистики и нарисуем метки к ним
+  -- РЎРѕР·РґР°РґРёРј РїРѕР»СЏ РґР»СЏ РІС‹РІРѕРґР° С‚РµРєСѓС‰РµР№ СЃС‚Р°С‚РёСЃС‚РёРєРё Рё РЅР°СЂРёСЃСѓРµРј РјРµС‚РєРё Рє РЅРёРј
   setLabels <- foreach (zip [0..] dataset) $ \(y,s) -> do
-      -- Первая колонка
+      -- РџРµСЂРІР°СЏ РєРѕР»РѕРЅРєР°
       label <- labelNewWithMnemonic =<< i18n s;  let x=0
       tableAttach table label (x+0) (x+1) y (y+1) [Expand, Fill] [Expand, Fill] 0 0
       miscSetAlignment label 0 0     --set label [labelWidthChars := 25]
-      -- Вторая колонка
+      -- Р’С‚РѕСЂР°СЏ РєРѕР»РѕРЅРєР°
       label <- labelNew Nothing
       tableAttach table label (x+1) (x+2) y (y+1) [Expand, Fill] [Expand, Fill] 10 0
       set label [labelSelectable := True]
       miscSetAlignment label 1 0
-      -- Возвратим операцию, устанавливающую текст второй метки (предназначенной для вывода данных)
+      -- Р’РѕР·РІСЂР°С‚РёРј РѕРїРµСЂР°С†РёСЋ, СѓСЃС‚Р°РЅР°РІР»РёРІР°СЋС‰СѓСЋ С‚РµРєСЃС‚ РІС‚РѕСЂРѕР№ РјРµС‚РєРё (РїСЂРµРґРЅР°Р·РЅР°С‡РµРЅРЅРѕР№ РґР»СЏ РІС‹РІРѕРґР° РґР°РЅРЅС‹С…)
       return$ \text -> labelSetMarkup label$ bold$ text
   return (table, setLabels)
 
 {-# NOINLINE scrollableTextView #-}
--- |Прокручиваемый TextView
+-- |РџСЂРѕРєСЂСѓС‡РёРІР°РµРјС‹Р№ TextView
 scrollableTextView s attributes = do
   control <- newTextViewWithText s
   set control attributes
@@ -938,18 +1082,18 @@ scrollableTextView s attributes = do
                    , gwSetValue = (control=:)
                    }
 
--- |Создаёт новый объект TextView с заданным текстом
+-- |РЎРѕР·РґР°С‘С‚ РЅРѕРІС‹Р№ РѕР±СЉРµРєС‚ TextView СЃ Р·Р°РґР°РЅРЅС‹Рј С‚РµРєСЃС‚РѕРј
 newTextViewWithText s = do
   textView <- textViewNew
   textViewSetText textView s
   return textView
 
--- |Задаёт текст, отображаемый в TextView
+-- |Р—Р°РґР°С‘С‚ С‚РµРєСЃС‚, РѕС‚РѕР±СЂР°Р¶Р°РµРјС‹Р№ РІ TextView
 textViewSetText textView s = do
   buffer <- textViewGetBuffer textView
   textBufferSetText buffer s
 
--- |Считывает текст, отображаемый в TextView
+-- |РЎС‡РёС‚С‹РІР°РµС‚ С‚РµРєСЃС‚, РѕС‚РѕР±СЂР°Р¶Р°РµРјС‹Р№ РІ TextView
 textViewGetText textView = do
   buffer <- textViewGetBuffer      textView
   start  <- textBufferGetStartIter buffer
@@ -958,17 +1102,17 @@ textViewGetText textView = do
 
 
 ----------------------------------------------------------------------------------------------------
----- Выбор файла -----------------------------------------------------------------------------------
+---- Р’С‹Р±РѕСЂ С„Р°Р№Р»Р° -----------------------------------------------------------------------------------
 ----------------------------------------------------------------------------------------------------
 
 #if defined(FREEARC_WIN)
 
 {-# NOINLINE chooseFile #-}
--- |Выбор файла через диалог
+-- |Р’С‹Р±РѕСЂ С„Р°Р№Р»Р° С‡РµСЂРµР· РґРёР°Р»РѕРі
 chooseFile parentWindow dialogType dialogTitle filters getFilename setFilename = do
   title <- i18n dialogTitle
-  filename <- getFilename >>== windosifyPath
-  -- Строка фильтров состоит из пар (название,шаблоны), разделённых NULL char, плюс дополнительный NULL char в конце
+  filename <- getFilename
+  -- РЎС‚СЂРѕРєР° С„РёР»СЊС‚СЂРѕРІ СЃРѕСЃС‚РѕРёС‚ РёР· РїР°СЂ (РЅР°Р·РІР°РЅРёРµ,С€Р°Р±Р»РѕРЅС‹), СЂР°Р·РґРµР»С‘РЅРЅС‹С… NULL char, РїР»СЋСЃ РґРѕРїРѕР»РЅРёС‚РµР»СЊРЅС‹Р№ NULL char РІ РєРѕРЅС†Рµ
   filterStr <- prepareFilters filters >>== map (join2 "\0") >>== joinWith "\0" >>== (++"\0")
   withCFilePath title            $ \c_prompt   -> do
   withCFilePath filename         $ \c_filename -> do
@@ -995,7 +1139,7 @@ foreign import ccall safe "Environment.h GuiFormatDateTime"
 #else
 
 {-# NOINLINE chooseFile #-}
--- |Выбор файла через диалог
+-- |Р’С‹Р±РѕСЂ С„Р°Р№Р»Р° С‡РµСЂРµР· РґРёР°Р»РѕРі
 chooseFile parentWindow dialogType dialogTitle filters getFilename setFilename = do
   title <- i18n dialogTitle
   filename <- getFilename
@@ -1012,7 +1156,7 @@ chooseFile parentWindow dialogType dialogTitle filters getFilename setFilename =
         setFilename (utf8_to_unicode filename)
 
 {-# NOINLINE addFilters #-}
--- |Установить фильтры для выбора файла
+-- |РЈСЃС‚Р°РЅРѕРІРёС‚СЊ С„РёР»СЊС‚СЂС‹ РґР»СЏ РІС‹Р±РѕСЂР° С„Р°Р№Р»Р°
 addFilters chooserDialog filters = do
   for filters $ \(text, patterns) -> do
     filt <- fileFilterNew
@@ -1025,10 +1169,9 @@ guiFormatDateTime = formatDateTime
 #endif
 
 
--- |Подготовить фильтры к использованию в диалоге
+-- |РџРѕРґРіРѕС‚РѕРІРёС‚СЊ С„РёР»СЊС‚СЂС‹ Рє РёСЃРїРѕР»СЊР·РѕРІР°РЅРёСЋ РІ РґРёР°Р»РѕРіРµ
 prepareFilters filters = do
   foreach (filters &&& filters++["0309 All files (*)"]) $ \element -> do
     text <- i18n element
     let patterns = text .$words .$last .$drop 1 .$dropEnd 1
     return (text, patterns)
-

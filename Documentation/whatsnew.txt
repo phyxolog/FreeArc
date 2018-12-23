@@ -1,0 +1,8 @@
+Welcome to FreeArc 0.67 alpha
+
+Changes in this version:
+
+    * Compression to zip and 7z formats
+
+and lot of smaller changes. Full changelog:
+http://code.google.com/p/freearc/issues/list?can=1&q=status:fixed%20milestone=0.67

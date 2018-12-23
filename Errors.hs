@@ -1,12 +1,12 @@
 {-# OPTIONS_GHC -cpp #-}
 ---------------------------------------------------------------------------------------------------
----- Регистрация ошибок/предупреждений и печать сообщений о них. ----------------------------------
+---- Р РµРіРёСЃС‚СЂР°С†РёСЏ РѕС€РёР±РѕРє/РїСЂРµРґСѓРїСЂРµР¶РґРµРЅРёР№ Рё РїРµС‡Р°С‚СЊ СЃРѕРѕР±С‰РµРЅРёР№ Рѕ РЅРёС…. ----------------------------------
 ---------------------------------------------------------------------------------------------------
 module Errors where
 
 import Prelude hiding (catch)
 import Control.Concurrent
-import Control.Exception
+import Control.OldException
 import Control.Monad
 import Data.Char
 import Data.Maybe
@@ -25,15 +25,15 @@ import Utils
 import Files
 import Charsets
 
--- |Коды возврата программы
+-- |РљРѕРґС‹ РІРѕР·РІСЂР°С‚Р° РїСЂРѕРіСЂР°РјРјС‹
 aEXIT_CODE_SUCCESS      = 0
 aEXIT_CODE_WARNINGS     = 1
 aEXIT_CODE_FATAL_ERROR  = 2
 aEXIT_CODE_BAD_PASSWORD = 21
 aEXIT_CODE_USER_BREAK   = 255
 
--- |Все возможные типы ошибок и предупреждений
-data ErrorTypes = GENERAL_ERROR                 [String]
+-- |Р’СЃРµ РІРѕР·РјРѕР¶РЅС‹Рµ С‚РёРїС‹ РѕС€РёР±РѕРє Рё РїСЂРµРґСѓРїСЂРµР¶РґРµРЅРёР№
+data ErrorType  = GENERAL_ERROR                 [String]
                 | CMDLINE_GENERAL               [String]
                 | CMDLINE_SYNTAX                String
                 | CMDLINE_INCOMPATIBLE_OPTIONS  String String
@@ -48,7 +48,12 @@ data ErrorTypes = GENERAL_ERROR                 [String]
                 | CANT_READ_DIRECTORY           String
                 | CANT_GET_FILEINFO             String
                 | CANT_OPEN_FILE                String
+                | UNSUPPORTED_METHOD            String
+                | DATA_ERROR                    String
+                | DATA_ERROR_ENCRYPTED          String
                 | BAD_CRC                       String
+                | BAD_CRC_ENCRYPTED             String
+                | UNKNOWN_ERROR                 String
                 | BAD_CFG_SECTION               String [String]
                 | OP_TERMINATED
                 | TERMINATED
@@ -74,12 +79,12 @@ throwSqlite = throwDyn
 -}
 
 ---------------------------------------------------------------------------------------------------
----- Обработка Ctrl-Break, Close и т.п. внешних событий -------------------------------------------
+---- РћР±СЂР°Р±РѕС‚РєР° Ctrl-Break, Close Рё С‚.Рї. РІРЅРµС€РЅРёС… СЃРѕР±С‹С‚РёР№ -------------------------------------------
 ---------------------------------------------------------------------------------------------------
 
 setCtrlBreakHandler action = do
   --myThread <- myThreadId
-  -- При выходе или возникновении исключения восстановим предыдущий обработчик событий
+  -- РџСЂРё РІС‹С…РѕРґРµ РёР»Рё РІРѕР·РЅРёРєРЅРѕРІРµРЅРёРё РёСЃРєР»СЋС‡РµРЅРёСЏ РІРѕСЃСЃС‚Р°РЅРѕРІРёРј РїСЂРµРґС‹РґСѓС‰РёР№ РѕР±СЂР°Р±РѕС‚С‡РёРє СЃРѕР±С‹С‚РёР№
 #if defined(FREEARC_WIN)
   bracket (installHandler$ Catch onBreak) (installHandler) $  \oldHandler -> do
     action
@@ -89,19 +94,19 @@ setCtrlBreakHandler action = do
     action
 #endif
 
--- |Вызвать fail, если установлен флаг аварийного завершения программы
+-- |Р’С‹Р·РІР°С‚СЊ fail, РµСЃР»Рё СѓСЃС‚Р°РЅРѕРІР»РµРЅ С„Р»Р°Рі Р°РІР°СЂРёР№РЅРѕРіРѕ Р·Р°РІРµСЂС€РµРЅРёСЏ РїСЂРѕРіСЂР°РјРјС‹
 failOnTerminated = do
   whenM (val operationTerminated) $ do
     fail ""
 
--- |Обработка Ctrl-Break и нажатия на Cancel сводится к выполнению финализаторов и
--- установке спец. флага, который проверяется коллбэками, вызываемыми из Си
+-- |РћР±СЂР°Р±РѕС‚РєР° Ctrl-Break Рё РЅР°Р¶Р°С‚РёСЏ РЅР° Cancel СЃРІРѕРґРёС‚СЃСЏ Рє РІС‹РїРѕР»РЅРµРЅРёСЋ С„РёРЅР°Р»РёР·Р°С‚РѕСЂРѕРІ Рё
+-- СѓСЃС‚Р°РЅРѕРІРєРµ СЃРїРµС†. С„Р»Р°РіР°, РєРѕС‚РѕСЂС‹Р№ РїСЂРѕРІРµСЂСЏРµС‚СЃСЏ РєРѕР»Р»Р±СЌРєР°РјРё, РІС‹Р·С‹РІР°РµРјС‹РјРё РёР· РЎРё
 onBreak event = terminateOperation
 terminateOperation = do
   isFM <- val fileManagerMode
   registerError$ iif isFM OP_TERMINATED TERMINATED
 
--- |Принудительно завершает выполнение программы с заданным exitCode и печатью сообщения msg
+-- |РџСЂРёРЅСѓРґРёС‚РµР»СЊРЅРѕ Р·Р°РІРµСЂС€Р°РµС‚ РІС‹РїРѕР»РЅРµРЅРёРµ РїСЂРѕРіСЂР°РјРјС‹ СЃ Р·Р°РґР°РЅРЅС‹Рј exitCode Рё РїРµС‡Р°С‚СЊСЋ СЃРѕРѕР±С‰РµРЅРёСЏ msg
 shutdown msg exitCode = do
   w <- val warnings
   -- Make cleanup unless this is a second call (after pause)
@@ -121,8 +126,8 @@ shutdown msg exitCode = do
         _ -> condPrintLineLn "n"$ "There were "++show w++" warning(s)"
       ignoreErrors (msg &&& condPrintLineLn "n" msg)
       condPrintLineLn "e" ""
-#if !defined(FREEARC_WIN) && !defined(FREEARC_GUI)
-    putStrLn ""  -- в Unix отсутствует автоматический перевод строки в терминале по завершению программы
+#if !defined(FREEARC_GUI)
+    putStrLn ""
 #endif
 
     ignoreErrors$ closeLogFile
@@ -130,22 +135,25 @@ shutdown msg exitCode = do
     ignoreErrors$ hFlush stderr
     --killThread myThread
 
+    -- Р’С‹РєР»СЋС‡РёС‚СЊ РєРѕРјРїСЊСЋС‚РµСЂ РµСЃР»Рё Р·Р°РїСЂРѕС€РµРЅРѕ
+    powerOffComputer `onM` val perform_shutdown
+
     -- Make a pause if necessary
-    when (exitCode/=aEXIT_CODE_USER_BREAK) $ do
-      warningsBefore' <- val warningsBefore
-      pause_option <- val pause_before_exit
-      pause <- val pauseAction
-      pause `on` case pause_option of
-                   "on"          -> True
-                   "off"         -> False
-                   "on-warnings" -> w>warningsBefore' || exitCode/=aEXIT_CODE_SUCCESS
-                   "on-error"    -> exitCode/=aEXIT_CODE_SUCCESS
-                   _             -> False
+    unlessM (val fileManagerMode) $ do
+      when (exitCode/=aEXIT_CODE_USER_BREAK) $ do
+        warningsBefore' <- val warningsBefore
+        pause_option <- val pause_before_exit
+        pause <- val pauseAction
+        case pause_option of
+          "on"          -> pause
+          "on-warnings" -> pause `on_` w>warningsBefore' || exitCode/=aEXIT_CODE_SUCCESS
+          "on-error"    -> pause `on_` exitCode/=aEXIT_CODE_SUCCESS
+          _             -> doNothing0
 
   -- And finally - exit program!
   exit (exitCode  |||  (w &&& aEXIT_CODE_WARNINGS))
 #if 0
-  -- Более корректный способ завершения программы, к сожалению arc.exe с ним иногда виснет
+  -- Р‘РѕР»РµРµ РєРѕСЂСЂРµРєС‚РЅС‹Р№ СЃРїРѕСЃРѕР± Р·Р°РІРµСЂС€РµРЅРёСЏ РїСЂРѕРіСЂР°РјРјС‹, Рє СЃРѕР¶Р°Р»РµРЅРёСЋ arc.exe СЃ РЅРёРј РёРЅРѕРіРґР° РІРёСЃРЅРµС‚
   exitWith$ case () of
    _ | exitCode>0 -> ExitFailure exitCode
      | w>0        -> ExitFailure aEXIT_CODE_WARNINGS
@@ -153,7 +161,10 @@ shutdown msg exitCode = do
 #endif
   return undefined
 
--- |"handle" с выполнением "onException" также при ^Break
+-- |Р’С‹Р·С‹РІР°РµС‚СЃСЏ РєРѕРіРґР° РѕС‡РµСЂРµРґСЊ РєРѕРјР°РЅРґ СЃС‚Р°РЅРѕРІРёС‚СЃСЏ РїСѓСЃС‚Р°
+onEmptyQueue  =  powerOffComputer `onM` val perform_shutdown
+
+-- |"handle" СЃ РІС‹РїРѕР»РЅРµРЅРёРµРј "onException" С‚Р°РєР¶Рµ РїСЂРё ^Break
 handleCtrlBreak name onException action = do
   failOnTerminated
   id <- newId
@@ -162,7 +173,7 @@ handleCtrlBreak name onException action = do
              (removeFinalizer id)
              (action)
 
--- |"bracket" с выполнением "close" также при ^Break
+-- |"bracket" СЃ РІС‹РїРѕР»РЅРµРЅРёРµРј "close" С‚Р°РєР¶Рµ РїСЂРё ^Break
 bracketCtrlBreak name init close action = do
   failOnTerminated
   id <- newId
@@ -170,58 +181,62 @@ bracketCtrlBreak name init close action = do
           (\x -> do removeFinalizer      id; close x)
           action
 
--- |bracketCtrlBreak, выполняющий fail при возврате Nothing из init
+-- |bracketCtrlBreak, РІС‹РїРѕР»РЅСЏСЋС‰РёР№ fail РїСЂРё РІРѕР·РІСЂР°С‚Рµ Nothing РёР· init
 bracketCtrlBreakMaybe name init fail close action = do
   bracketCtrlBreak name (do x<-init; when (isNothing x) fail; return x)
                         (`whenJust_` close)
                         (`whenJust`  action)
 
--- |Выполнить close-действие по завершению action
+-- |Р’С‹РїРѕР»РЅРёС‚СЊ close-РґРµР№СЃС‚РІРёРµ РїРѕ Р·Р°РІРµСЂС€РµРЅРёСЋ action
 ensureCtrlBreak name close action  =  bracketCtrlBreak name (return ()) (\_->close) (\_->action)
 
--- Добавить/удалить finalizer в список
+-- Р”РѕР±Р°РІРёС‚СЊ/СѓРґР°Р»РёС‚СЊ finalizer РІ СЃРїРёСЃРѕРє
 addFinalizer name id action  =  finalizers .= ((name,id,action):)
 removeFinalizer id           =  finalizers .= filter ((/=id).snd3)
 newId                        =  do curId+=1; id<-val curId; return id
 
--- |Уникальный номер
+-- |РЈРЅРёРєР°Р»СЊРЅС‹Р№ РЅРѕРјРµСЂ
 curId :: IORef Int
 curId = unsafePerformIO (ref 0)
 {-# NOINLINE curId #-}
 
--- |Список действий, которые надо выполнить перед аварийным завершением программы
+-- |РЎРїРёСЃРѕРє РґРµР№СЃС‚РІРёР№, РєРѕС‚РѕСЂС‹Рµ РЅР°РґРѕ РІС‹РїРѕР»РЅРёС‚СЊ РїРµСЂРµРґ Р°РІР°СЂРёР№РЅС‹Рј Р·Р°РІРµСЂС€РµРЅРёРµРј РїСЂРѕРіСЂР°РјРјС‹
 finalizers :: IORef [(String, Int, IO ())]
 finalizers = unsafePerformIO (ref [])
 {-# NOINLINE finalizers #-}
 
--- |ИД основного треда операции (только в режиме файл-менеджера)
+-- |РР” РѕСЃРЅРѕРІРЅРѕРіРѕ С‚СЂРµРґР° РѕРїРµСЂР°С†РёРё (С‚РѕР»СЊРєРѕ РІ СЂРµР¶РёРјРµ С„Р°Р№Р»-РјРµРЅРµРґР¶РµСЂР°)
 parent_id :: IORef ThreadId
 parent_id = unsafePerformIO (ref undefined)
 {-# NOINLINE parent_id #-}
 
--- |Флаг, показывающий что мы находимся в режиме прерывания текущей операции
+-- |Р¤Р»Р°Рі, РїРѕРєР°Р·С‹РІР°СЋС‰РёР№ С‡С‚Рѕ РјС‹ РЅР°С…РѕРґРёРјСЃСЏ РІ СЂРµР¶РёРјРµ РїСЂРµСЂС‹РІР°РЅРёСЏ С‚РµРєСѓС‰РµР№ РѕРїРµСЂР°С†РёРё
 operationTerminated = unsafePerformIO (ref False)
 {-# NOINLINE operationTerminated #-}
 
--- |Устанавливается после завершения выполнения всех команд, когда мы просто ждём закрытия окна программы
+-- |РЈСЃС‚Р°РЅР°РІР»РёРІР°РµС‚СЃСЏ РїРѕСЃР»Рµ Р·Р°РІРµСЂС€РµРЅРёСЏ РІС‹РїРѕР»РЅРµРЅРёСЏ РІСЃРµС… РєРѕРјР°РЅРґ, РєРѕРіРґР° РјС‹ РїСЂРѕСЃС‚Рѕ Р¶РґС‘Рј Р·Р°РєСЂС‹С‚РёСЏ РѕРєРЅР° РїСЂРѕРіСЂР°РјРјС‹
 programFinished = unsafePerformIO (ref False)
 {-# NOINLINE programFinished #-}
 
--- |Режим работы файл-менеджера: при этом registerError обрабатывается по-другому - мы дожидаемся завершения всех тредов упаковки и распаковки
+-- |Р РµР¶РёРј СЂР°Р±РѕС‚С‹ С„Р°Р№Р»-РјРµРЅРµРґР¶РµСЂР°: РїСЂРё СЌС‚РѕРј registerError РѕР±СЂР°Р±Р°С‚С‹РІР°РµС‚СЃСЏ РїРѕ-РґСЂСѓРіРѕРјСѓ - РјС‹ РґРѕР¶РёРґР°РµРјСЃСЏ Р·Р°РІРµСЂС€РµРЅРёСЏ РІСЃРµС… С‚СЂРµРґРѕРІ СѓРїР°РєРѕРІРєРё Рё СЂР°СЃРїР°РєРѕРІРєРё
 fileManagerMode = unsafePerformIO (ref False)
 {-# NOINLINE fileManagerMode #-}
 
--- |Делать ли паузу перед выходом из программы?
+-- |Р”РµР»Р°С‚СЊ Р»Рё РїР°СѓР·Сѓ РїРµСЂРµРґ РІС‹С…РѕРґРѕРј РёР· РїСЂРѕРіСЂР°РјРјС‹?
 pause_before_exit = unsafePerformIO (ref "")
 {-# NOINLINE pause_before_exit #-}
 
--- |UI-операция, вызываемая для задержки выхода из программы
+-- |UI-РѕРїРµСЂР°С†РёСЏ, РІС‹Р·С‹РІР°РµРјР°СЏ РґР»СЏ Р·Р°РґРµСЂР¶РєРё РІС‹С…РѕРґР° РёР· РїСЂРѕРіСЂР°РјРјС‹
 pauseAction = unsafePerformIO (ref$ return ()) :: IORef (IO())
 {-# NOINLINE pauseAction #-}
 
+-- |Р’С‹РєР»СЋС‡РёС‚СЊ РєРѕРјРїСЊСЋС‚РµСЂ РїРѕ РѕРєРѕРЅС‡Р°РЅРёСЋ СЂР°Р±РѕС‚С‹?
+perform_shutdown = unsafePerformIO (ref False)
+{-# NOINLINE perform_shutdown #-}
+
 
 ---------------------------------------------------------------------------------------------------
----- Тексты сообщений о различных типах ошибок. Подходящий ресурс для интернализации --------------
+---- РўРµРєСЃС‚С‹ СЃРѕРѕР±С‰РµРЅРёР№ Рѕ СЂР°Р·Р»РёС‡РЅС‹С… С‚РёРїР°С… РѕС€РёР±РѕРє. РџРѕРґС…РѕРґСЏС‰РёР№ СЂРµСЃСѓСЂСЃ РґР»СЏ РёРЅС‚РµСЂРЅР°Р»РёР·Р°С†РёРё --------------
 ---------------------------------------------------------------------------------------------------
 
 errormsg (GENERAL_ERROR msgs) =
@@ -232,7 +247,7 @@ errormsg (BROKEN_ARCHIVE arcname msgs) = do
   i18fmt ["0341 %1 isn't archive or this archive is corrupt: %2. Please recover it using 'r' command or use -tp- option to ignore Recovery Record", arcname, msg]
 
 errormsg (INTERNAL_ERROR msg) =
-  return$ "FreeArc internal error: "++msg
+  return$ aFreeArc++" internal error: "++msg
 
 errormsg (COMPRESSION_ERROR msgs) =
   i18fmt msgs
@@ -283,8 +298,23 @@ errormsg (CANT_GET_FILEINFO filename) =
 errormsg (CANT_OPEN_FILE filename) =
   i18fmt ["0332 can't open file \"%1\"", filename]
 
+errormsg (UNSUPPORTED_METHOD filename) =
+  i18fmt ["0472 Unsupported compression method for \"%1\".", filename]
+
+errormsg (DATA_ERROR filename) =
+  i18fmt ["0473 Data error in \"%1\". File is broken.", filename]
+
+errormsg (DATA_ERROR_ENCRYPTED filename) =
+  i18fmt ["0474 Data error in encrypted file \"%1\". Wrong password?", filename]
+
 errormsg (BAD_CRC filename) =
-  i18fmt ["0333 CRC error in file \"%1\"", filename]
+  i18fmt ["0475 CRC failed in \"%1\". File is broken.", filename]
+
+errormsg (BAD_CRC_ENCRYPTED filename) =
+  i18fmt ["0476 CRC failed in encrypted file \"%1\". Wrong password?", filename]
+
+errormsg (UNKNOWN_ERROR filename) =
+  i18fmt ["0477 Unknown error", filename]
 
 errormsg (BAD_CFG_SECTION cfgfile section) =
   i18fmt ["0334 bad section %1 in %2", head section, cfgfile]
@@ -308,14 +338,14 @@ errormsg (BAD_PASSWORD archive file) =
   i18fmt ["0340 bad password for %1 in archive %2", file, archive]
 
 
--- |Перечислить список значений
+-- |РџРµСЂРµС‡РёСЃР»РёС‚СЊ СЃРїРёСЃРѕРє Р·РЅР°С‡РµРЅРёР№
 enumerate s list  =  joinWith2 ", " (" "++s++" ") (map quote list)
 
 {-# NOINLINE errormsg #-}
 
 
 ----------------------------------------------------------------------------------------------------
----- Коды выхода для различных ошибок --------------------------------------------------------------
+---- РљРѕРґС‹ РІС‹С…РѕРґР° РґР»СЏ СЂР°Р·Р»РёС‡РЅС‹С… РѕС€РёР±РѕРє --------------------------------------------------------------
 ----------------------------------------------------------------------------------------------------
 
 errcode TERMINATED     = aEXIT_CODE_USER_BREAK
@@ -324,28 +354,28 @@ errcode _              = aEXIT_CODE_FATAL_ERROR
 
 
 ----------------------------------------------------------------------------------------------------
----- Ввод/вывод на экран в кодировке, заданной опцией -sct -----------------------------------------
+---- Р’РІРѕРґ/РІС‹РІРѕРґ РЅР° СЌРєСЂР°РЅ РІ РєРѕРґРёСЂРѕРІРєРµ, Р·Р°РґР°РЅРЅРѕР№ РѕРїС†РёРµР№ -sct -----------------------------------------
 ----------------------------------------------------------------------------------------------------
 
-#ifdef FREEARC_GUI
-myPutStr      = doNothing
-myPutStrLn    = doNothing
-myFlushStdout = doNothing0
-#else
+#if !defined(FREEARC_GUI) && !defined(FREEARC_DLL)
 myGetLine     = getLine >>= terminal2str
 myPutStr      = putStr   =<<. str2terminal
 myPutStrLn    = putStrLn =<<. str2terminal
 myFlushStdout = hFlush stdout
+#else
+myPutStr      = doNothing
+myPutStrLn    = doNothing
+myFlushStdout = doNothing0
 #endif
 
 
 ----------------------------------------------------------------------------------------------------
----- Работа с логфайлом и управление объёмом вывода на экран в соответствии с опцией --display -----
+---- Р Р°Р±РѕС‚Р° СЃ Р»РѕРіС„Р°Р№Р»РѕРј Рё СѓРїСЂР°РІР»РµРЅРёРµ РѕР±СЉС‘РјРѕРј РІС‹РІРѕРґР° РЅР° СЌРєСЂР°РЅ РІ СЃРѕРѕС‚РІРµС‚СЃС‚РІРёРё СЃ РѕРїС†РёРµР№ --display -----
 ----------------------------------------------------------------------------------------------------
 
--- Напечатать заданную строку, отделив её при необходимости от предыдущей команды/обработанного архива
--- Кроме того, первая буква печатаемой строки переводится в нижний регистр,
--- если она печатается непосредственно после заголовка программы
+-- РќР°РїРµС‡Р°С‚Р°С‚СЊ Р·Р°РґР°РЅРЅСѓСЋ СЃС‚СЂРѕРєСѓ, РѕС‚РґРµР»РёРІ РµС‘ РїСЂРё РЅРµРѕР±С…РѕРґРёРјРѕСЃС‚Рё РѕС‚ РїСЂРµРґС‹РґСѓС‰РµР№ РєРѕРјР°РЅРґС‹/РѕР±СЂР°Р±РѕС‚Р°РЅРЅРѕРіРѕ Р°СЂС…РёРІР°
+-- РљСЂРѕРјРµ С‚РѕРіРѕ, РїРµСЂРІР°СЏ Р±СѓРєРІР° РїРµС‡Р°С‚Р°РµРјРѕР№ СЃС‚СЂРѕРєРё РїРµСЂРµРІРѕРґРёС‚СЃСЏ РІ РЅРёР¶РЅРёР№ СЂРµРіРёСЃС‚СЂ,
+-- РµСЃР»Рё РѕРЅР° РїРµС‡Р°С‚Р°РµС‚СЃСЏ РЅРµРїРѕСЃСЂРµРґСЃС‚РІРµРЅРЅРѕ РїРѕСЃР»Рµ Р·Р°РіРѕР»РѕРІРєР° РїСЂРѕРіСЂР°РјРјС‹
 printLine = printLineC ""
 printLineC c str = do
   (oldc,separator) <- val separator'
@@ -353,73 +383,76 @@ printLineC c str = do
       makeLower xs                    =  xs
   let handle "w" = stderr
       handle _   = stdout
-#ifndef FREEARC_GUI
+#if !defined(FREEARC_GUI) && !defined(FREEARC_DLL)
   hPutStr (handle oldc) =<< str2terminal separator
   hPutStr (handle c)    =<< str2terminal ((oldc=="h" &&& makeLower) str)
   hFlush  (handle c)
 #endif
   separator' =: (c,"")
 
--- |Напечатать строку с разделителем строк после неё
+-- |РќР°РїРµС‡Р°С‚Р°С‚СЊ СЃС‚СЂРѕРєСѓ СЃ СЂР°Р·РґРµР»РёС‚РµР»РµРј СЃС‚СЂРѕРє РїРѕСЃР»Рµ РЅРµС‘
 printLineLn str = do
   printLine str
   printLineNeedSeparator "\n"
 
--- Отделить последующий вывод заданной строкой. Не выводим эту строку сразу,
--- поскольку никакого последующего вывода может и не быть :)))
+-- РћС‚РґРµР»РёС‚СЊ РїРѕСЃР»РµРґСѓСЋС‰РёР№ РІС‹РІРѕРґ Р·Р°РґР°РЅРЅРѕР№ СЃС‚СЂРѕРєРѕР№. РќРµ РІС‹РІРѕРґРёРј СЌС‚Сѓ СЃС‚СЂРѕРєСѓ СЃСЂР°Р·Сѓ,
+-- РїРѕСЃРєРѕР»СЊРєСѓ РЅРёРєР°РєРѕРіРѕ РїРѕСЃР»РµРґСѓСЋС‰РµРіРѕ РІС‹РІРѕРґР° РјРѕР¶РµС‚ Рё РЅРµ Р±С‹С‚СЊ :)))
 printLineNeedSeparator str = do
   separator' =: ("",str)
 
--- Записать строку в логфайл.
--- Вывести её на экран при условии, что её вывод не запрещён опцией --display
-condPrintLine c line = do
-  if c=="G" then val loggingHandlers >>= mapM_ ($line) else do
-  display_option <- val display_option'
-  when (c/="$" || (display_option `contains` '#')) $ do
-      printLog line
-  when (display_option `contains_one_of` c) $ do
-      printLineC c line
-
--- |Напечатать строку с разделителем строк после неё
+-- |РќР°РїРµС‡Р°С‚Р°С‚СЊ СЃС‚СЂРѕРєСѓ СЃ СЂР°Р·РґРµР»РёС‚РµР»РµРј СЃС‚СЂРѕРє РїРѕСЃР»Рµ РЅРµС‘
 condPrintLineLn c line = do
   condPrintLine c line
   condPrintLineNeedSeparator c "\n"
 
--- Отделить последующий вывод заданной строкой при условии разрешения вывода класса c
+-- Р—Р°РїРёСЃР°С‚СЊ СЃС‚СЂРѕРєСѓ РІ Р»РѕРіС„Р°Р№Р».
+-- Р’С‹РІРµСЃС‚Рё РµС‘ РЅР° СЌРєСЂР°РЅ РїСЂРё СѓСЃР»РѕРІРёРё, С‡С‚Рѕ РµС‘ РІС‹РІРѕРґ РЅРµ Р·Р°РїСЂРµС‰С‘РЅ РѕРїС†РёРµР№ --display
+condPrintLine c line = do
+  if c=="G" then val loggingHandlers >>= mapM_ ($line) else do
+  display_option <- val display_option'
+  when (c `notElem` words "$ !"   ||   (display_option `contains` '#')) $ do
+      printLog line
+  when (display_option `contains_one_of` c) $ do
+      printLineC c line
+
+-- РћС‚РґРµР»РёС‚СЊ РїРѕСЃР»РµРґСѓСЋС‰РёР№ РІС‹РІРѕРґ Р·Р°РґР°РЅРЅРѕР№ СЃС‚СЂРѕРєРѕР№ РїСЂРё СѓСЃР»РѕРІРёРё СЂР°Р·СЂРµС€РµРЅРёСЏ РІС‹РІРѕРґР° РєР»Р°СЃСЃР° c
 condPrintLineNeedSeparator c str = do
   display_option <- val display_option'
-  when (c/="$" || (display_option `contains` '#')) $ do
+  when (c `notElem` words "$ !"   ||   (display_option `contains` '#')) $ do
       log_separator' =: str
   when (c=="" || (display_option `contains_one_of` c)) $ do
       separator' =: (c,str)
 
--- Открыть логфайл
+-- РћС‚РєСЂС‹С‚СЊ Р»РѕРіС„Р°Р№Р»
 openLogFile logfilename = do
-  closeLogFile  -- закрыть предыдущий, если был
+  closeLogFile  -- Р·Р°РєСЂС‹С‚СЊ РїСЂРµРґС‹РґСѓС‰РёР№, РµСЃР»Рё Р±С‹Р»
   logfile <- case logfilename of
                  ""  -> return Nothing
-                 log -> fileAppendText log >>== Just
+                 log -> (do buildPathTo log
+                            fileAppendText log >>== Just)
+                        `catch` (\e -> do registerWarning (CANT_OPEN_FILE log)
+                                          return Nothing)
   logfile' =: logfile
 
--- Вывести строку в логфайл
+-- Р’С‹РІРµСЃС‚Рё СЃС‚СЂРѕРєСѓ РІ Р»РѕРіС„Р°Р№Р»
 printLog line = do
   separator <- val log_separator'
   whenJustM_ (val logfile') $ \log -> do
       fileWrite log =<< str2logfile (separator ++ line); fileFlush log
       log_separator' =: ""
 
--- Закрыть логфайл
+-- Р—Р°РєСЂС‹С‚СЊ Р»РѕРіС„Р°Р№Р»
 closeLogFile = do
   whenJustM_ (val logfile') fileClose
   logfile' =: Nothing
 
--- Переменная, хранящая Handle логфайла
+-- РџРµСЂРµРјРµРЅРЅР°СЏ, С…СЂР°РЅСЏС‰Р°СЏ Handle Р»РѕРіС„Р°Р№Р»Р°
 logfile'        = unsafePerformIO$ newIORef Nothing
--- Переменные, используемые для украшения печати
+-- РџРµСЂРµРјРµРЅРЅС‹Рµ, РёСЃРїРѕР»СЊР·СѓРµРјС‹Рµ РґР»СЏ СѓРєСЂР°С€РµРЅРёСЏ РїРµС‡Р°С‚Рё
 separator'      = unsafePerformIO$ newIORef ("","") :: IORef (String,String)
 log_separator'  = unsafePerformIO$ newIORef "\n"    :: IORef String
-display_option' = unsafePerformIO$ newIORef$ error "undefined display_option"
--- Операции вывода сообщений в лог
+display_option' = unsafePerformIO$ newIORef ""      :: IORef String
+-- РћРїРµСЂР°С†РёРё РІС‹РІРѕРґР° СЃРѕРѕР±С‰РµРЅРёР№ РІ Р»РѕРі
 loggingHandlers = unsafePerformIO$ newIORef [] :: IORef [String -> IO ()]
 
 {-# NOINLINE printLine #-}
@@ -431,25 +464,27 @@ loggingHandlers = unsafePerformIO$ newIORef [] :: IORef [String -> IO ()]
 {-# NOINLINE display_option' #-}
 
 ----------------------------------------------------------------------------------------------------
----- Печать сообщений об ошибках и предупреждений
+---- РџРµС‡Р°С‚СЊ СЃРѕРѕР±С‰РµРЅРёР№ РѕР± РѕС€РёР±РєР°С… Рё РїСЂРµРґСѓРїСЂРµР¶РґРµРЅРёР№
 ----------------------------------------------------------------------------------------------------
 
--- |Запись сообщения об ошибке в логфайл и аварийное завершение программы с этим сообщением
+-- |Р—Р°РїРёСЃСЊ СЃРѕРѕР±С‰РµРЅРёСЏ РѕР± РѕС€РёР±РєРµ РІ Р»РѕРіС„Р°Р№Р» Рё Р°РІР°СЂРёР№РЅРѕРµ Р·Р°РІРµСЂС€РµРЅРёРµ РїСЂРѕРіСЂР°РјРјС‹ СЃ СЌС‚РёРј СЃРѕРѕР±С‰РµРЅРёРµРј
 registerError err = do
+  unless (err `elem` [TERMINATED,OP_TERMINATED]) $ do
+    val errcodeHandler >>= ($err)
   msg <- errormsg err
   msg <- if err `elem` [TERMINATED,OP_TERMINATED]
            then return msg
            else i18fmt ["0316 ERROR: %1", msg]
   val errorHandlers >>= mapM_ ($msg)
-  -- Если мы не в режиме файл-менеджера - совершаем аварийный выход из программы
+  -- Р•СЃР»Рё РјС‹ РЅРµ РІ СЂРµР¶РёРјРµ С„Р°Р№Р»-РјРµРЅРµРґР¶РµСЂР° - СЃРѕРІРµСЂС€Р°РµРј Р°РІР°СЂРёР№РЅС‹Р№ РІС‹С…РѕРґ РёР· РїСЂРѕРіСЂР°РјРјС‹
   unlessM (val fileManagerMode) $ do
     shutdown msg (errcode err)
-  -- Иначе ждём завершения всех тредов компрессии
+  -- РРЅР°С‡Рµ Р¶РґС‘Рј Р·Р°РІРµСЂС€РµРЅРёСЏ РІСЃРµС… С‚СЂРµРґРѕРІ РєРѕРјРїСЂРµСЃСЃРёРё
   operationTerminated =: True
   killThread =<< val parent_id
   fail ""
 
--- |Запись предупреждения в логфайл и вывод его на экран
+-- |Р—Р°РїРёСЃСЊ РїСЂРµРґСѓРїСЂРµР¶РґРµРЅРёСЏ РІ Р»РѕРіС„Р°Р№Р» Рё РІС‹РІРѕРґ РµРіРѕ РЅР° СЌРєСЂР°РЅ
 registerWarning warn = do
   warnings += 1
   msg <- errormsg warn
@@ -457,24 +492,25 @@ registerWarning warn = do
   val warningHandlers >>= mapM_ ($msg)
   condPrintLineLn "w" msg
 
--- |Выполнить операцию и возвратить количество возникших при этом warning'ов
+-- |Р’С‹РїРѕР»РЅРёС‚СЊ РѕРїРµСЂР°С†РёСЋ Рё РІРѕР·РІСЂР°С‚РёС‚СЊ РєРѕР»РёС‡РµСЃС‚РІРѕ РІРѕР·РЅРёРєС€РёС… РїСЂРё СЌС‚РѕРј warning'РѕРІ
 count_warnings action = do
   w0 <- val warnings
   action
   w  <- val warnings
   return (w-w0)
 
--- |Счётчик ошибок, возникших в ходе работы программы
+-- |РЎС‡С‘С‚С‡РёРє РѕС€РёР±РѕРє, РІРѕР·РЅРёРєС€РёС… РІ С…РѕРґРµ СЂР°Р±РѕС‚С‹ РїСЂРѕРіСЂР°РјРјС‹
 warnings = unsafePerformIO$ newIORef 0 :: IORef Int
--- |Количество предупреждений перед последним показом диалога прогресса
+-- |РљРѕР»РёС‡РµСЃС‚РІРѕ РїСЂРµРґСѓРїСЂРµР¶РґРµРЅРёР№ РїРµСЂРµРґ РїРѕСЃР»РµРґРЅРёРј РїРѕРєР°Р·РѕРј РґРёР°Р»РѕРіР° РїСЂРѕРіСЂРµСЃСЃР°
 warningsBefore = unsafePerformIO$ newIORef 0 :: IORef Int
 
--- В зависимости от режима зарегистрировать ошибку или предупреждение
+-- Р’ Р·Р°РІРёСЃРёРјРѕСЃС‚Рё РѕС‚ СЂРµР¶РёРјР° Р·Р°СЂРµРіРёСЃС‚СЂРёСЂРѕРІР°С‚СЊ РѕС€РёР±РєСѓ РёР»Рё РїСЂРµРґСѓРїСЂРµР¶РґРµРЅРёРµ
 registerThreadError err = do
   isFM <- val fileManagerMode
   (iif isFM registerWarning registerError) err
 
--- Операции, выполняемые при появлении ошибки/предупреждения (регистрируются в других частях программы)
+-- РћРїРµСЂР°С†РёРё, РІС‹РїРѕР»РЅСЏРµРјС‹Рµ РїСЂРё РїРѕСЏРІР»РµРЅРёРё РѕС€РёР±РєРё/РїСЂРµРґСѓРїСЂРµР¶РґРµРЅРёСЏ (СЂРµРіРёСЃС‚СЂРёСЂСѓСЋС‚СЃСЏ РІ РґСЂСѓРіРёС… С‡Р°СЃС‚СЏС… РїСЂРѕРіСЂР°РјРјС‹)
+errcodeHandler  = unsafePerformIO$ newIORef doNothing :: IORef (ErrorType -> IO ())
 errorHandlers   = unsafePerformIO$ newIORef [] :: IORef [String -> IO ()]
 warningHandlers = unsafePerformIO$ newIORef [] :: IORef [String -> IO ()]
 
@@ -486,15 +522,15 @@ warningHandlers = unsafePerformIO$ newIORef [] :: IORef [String -> IO ()]
 {-# NOINLINE warningHandlers #-}
 
 ----------------------------------------------------------------------------------------------------
----- Работа с файлами
+---- Р Р°Р±РѕС‚Р° СЃ С„Р°Р№Р»Р°РјРё
 ----------------------------------------------------------------------------------------------------
 
--- |Возвратить Nothing и напечатать сообщение об ошибке, если файл не удалось открыть
+-- |Р’РѕР·РІСЂР°С‚РёС‚СЊ Nothing Рё РЅР°РїРµС‡Р°С‚Р°С‚СЊ СЃРѕРѕР±С‰РµРЅРёРµ РѕР± РѕС€РёР±РєРµ, РµСЃР»Рё С„Р°Р№Р» РЅРµ СѓРґР°Р»РѕСЃСЊ РѕС‚РєСЂС‹С‚СЊ
 tryOpen filename = catchJust ioErrors
                      (fileOpen filename >>== Just)
                      (\e -> do registerWarning$ CANT_OPEN_FILE filename; return Nothing)
 
--- |Скопировать файл
+-- |РЎРєРѕРїРёСЂРѕРІР°С‚СЊ С„Р°Р№Р»
 fileCopy srcname dstname = do
   bracketCtrlBreak "fileClose1:fileCopy" (fileOpen srcname) (fileClose) $ \srcfile -> do
     handleCtrlBreak "fileRemove1:fileCopy" (ignoreErrors$ fileRemove dstname) $ do
@@ -510,4 +546,8 @@ fileCopy srcname dstname = do
 -- |Stop program execution
 foreign import ccall unsafe "stdlib.h exit"
   exit :: Int -> IO ()
+
+-- |Reboot computer (
+foreign import ccall unsafe "PowerOffComputer"
+  powerOffComputer :: IO ()
 

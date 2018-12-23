@@ -4,6 +4,6 @@
 C:\Base\Compiler\MinGW\bin\g++.exe -I.. cpp-example.cpp -ocpp-example.exe && cpp-example.exe
 
 cd ..
-hsc2hs tabi.hsc
+hsc2hs TABI.hsc
 cd Examples
 ghc -i.. -optc-I.. -lstdc++ -optl-s --make hs-example.hs cpp-server.cpp && hs-example.exe

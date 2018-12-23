@@ -56,10 +56,14 @@ typedef struct{
 } DOREGSTRUCT, *LPDOREGSTRUCT;
 
 #ifdef ISS_JOINER
-#define szShellExtensionTitle _T("IssJoiner")
+#define ProductName "IssJoiner"
+#elif defined(HAMSTER)
+#define ProductName "Hamster Free Archiver"
 #else
-#define szShellExtensionTitle _T("FreeArc")
+#define ProductName "FreeArc"
 #endif
+
+#define szShellExtensionTitle _T(ProductName)
 
 BOOL RegisterServer(CLSID, LPTSTR);
 BOOL UnregisterServer(CLSID, LPTSTR);
@@ -350,9 +354,9 @@ static int Lua_read_from_file (lua_State *L) {
   MultiByteToWideChar (CP_UTF8, 0, filename, -1, filenameW, MY_FILENAME_MAX);
 
   // Where and how many bytes to read
-  int origin = luaL_checkinteger(L, 2);
-  int offset = luaL_checkinteger(L, 3);
-  int size   = luaL_checkinteger(L, 4);
+  int     origin = luaL_checkinteger(L, 2);
+  __int64 offset = (__int64) luaL_checknumber(L, 3);
+  int     size   = luaL_checkinteger(L, 4);
 
   // Open file
   int f = _wopen (filenameW, _O_BINARY | _O_RDONLY);
@@ -362,15 +366,25 @@ static int Lua_read_from_file (lua_State *L) {
 
   // Alloc buffer
   void *buf = malloc(size);
-  if (!buf)
+  if (!buf) {
+    _close(f);
     return 0;  ////lua_pushstring (L, errormsg); luaL_error / lua_error
+  }
 
-  // Seek to and read data requested
-  _lseek (f, offset, origin);
+  // Seek to position specified
+  if (_lseeki64 (f, offset, origin) < 0) {
+    free(buf);
+    _close(f);
+    return 0;  ////lua_pushstring (L, errormsg); luaL_error / lua_error
+  }
+
+  // Read requested data
   int len = _read (f, buf, size);
   _close(f);
-  if (len<0)
+  if (len<0) {
+    free(buf);
     return 0;  ////lua_pushstring (L, errormsg); luaL_error / lua_error
+  }
 
   // Return the data read
   lua_pushlstring(L, (const char*)buf, len);
@@ -469,26 +483,62 @@ STDMETHODIMP CShellExt::Initialize(LPCITEMIDLIST pIDFolder, LPDATAOBJECT pDataOb
 // Worker code
 //---------------------------------------------------------------------------
 
+// Read file contents and append '\0'
+static char* read_string_from_file (TCHAR *filename) {
+  // Open file
+  int f = _wopen (filename, _O_TEXT | _O_RDONLY);
+  if (f<0)
+    return NULL;
+
+  // Alloc buffer
+  int size  = _filelength(f);
+  char *buf = (char*) malloc(size+1);
+  if (!buf)
+    return NULL;
+
+  int len = _read (f, buf, size);
+  _close(f);
+  if (len<0)
+    return NULL;
+
+  buf[len] = 0;
+
+  // Return the data read
+  return buf;
+}
+
+// Loads either user-local or global version of given script
+static void load_lua_script (lua_State *L, TCHAR *scriptFilename) {
+  char  *script;
+  TCHAR *fullname = (TCHAR*) malloc (sizeof(TCHAR) * MY_FILENAME_MAX);
+
+  if (S_OK == SHGetFolderPathW(NULL, CSIDL_APPDATA, NULL, 0 /*SHGFP_TYPE_CURRENT*/, fullname))
+  {
+    _tcscat (fullname, _T("\\") szShellExtensionTitle _T("\\ArcShellExt\\"));
+    _tcscat (fullname, scriptFilename);
+
+    script = read_string_from_file(fullname);
+    if (script != NULL)
+      goto executeScript;
+  }
+
+  GetModuleFileName(_hModule, fullname, MY_FILENAME_MAX);
+  _tcscpy (_tcsrchr(fullname, _T('\\')) + 1, scriptFilename);
+
+  script = read_string_from_file(fullname);
+
+executeScript:
+  if (script != NULL)
+    luaL_dostring (L, memcmp(script,"\xEF\xBB\xBF",3)==0? script+3 : script);  // skip UTF-8 BOM
+
+  free(script);
+  free(fullname);
+}
+
 void CShellExt::load_user_funcs() {
-  TCHAR *szModuleFullNameW = (TCHAR*) malloc (sizeof(TCHAR) * MY_FILENAME_MAX);;
-  char  *szModuleFullName  = ( char*) malloc (            4 * MY_FILENAME_MAX);  ;
-
-  GetModuleFileName(_hModule, szModuleFullNameW, MAX_PATH);
-  WideCharToMultiByte (CP_UTF8, 0, szModuleFullNameW, -1, szModuleFullName, MY_FILENAME_MAX, NULL, NULL);
-
-  char *filename = strrchr(szModuleFullName, '\\') + 1;
-
-  strcpy (filename, "ArcShellExt-system.lua");
-  luaL_dofile (L, szModuleFullName);                           //unicode!
-
-  strcpy (filename, "ArcShellExt-config.lua");
-  luaL_dofile (L, szModuleFullName);                           //unicode!
-
-  strcpy (filename, "ArcShellExt-user.lua");
-  luaL_dofile (L, szModuleFullName);                           //unicode!
-
-  free(szModuleFullName);
-  free(szModuleFullNameW);
+  load_lua_script (L, _T("ArcShellExt-system.lua"));
+  load_lua_script (L, _T("ArcShellExt-config.lua"));
+  load_lua_script (L, _T("ArcShellExt-user.lua"));
 }
 
 int CShellExt::add_menu_item() {
@@ -565,26 +615,28 @@ STDMETHODIMP CShellExt::QueryContextMenu(HMENU _hMenu, UINT _nIndex, UINT _idCmd
 
     if (numFiles)
     {
-      // Call build_menu, passing list of files selected
-      lua_getglobal (L, "build_menu");
-
-      if (!lua_checkstack (L, numFiles))
-        return 0;////error
+      // Call build_menu, passing array of files selected
+      lua_getglobal   (L, "build_menu");
+      lua_createtable (L, numFiles, 0);
 
       // Push UTF8 names of files selected to the Lua stack and save them to filenames[]
       TCHAR *WSelectedFilename = (TCHAR*) malloc (sizeof(TCHAR) * MY_FILENAME_MAX);
       int    total_size = 0;
-      for (UINT i = 0; i < numFiles; i++)
+      for (int i = 0; i < numFiles; i++)
       {
         DragQueryFile ((HDROP)m_stgMedium.hGlobal, i, WSelectedFilename, MY_FILENAME_MAX);
         WideCharToMultiByte (CP_UTF8, 0, WSelectedFilename, -1, SelectedFilename, MY_FILENAME_MAX, NULL, NULL);
+
+        // table[i+1] := SelectedFilename
         lua_pushstring (L, SelectedFilename);
+        lua_rawseti(L, -2, i+1);
+
         total_size += strlen(strrchr(SelectedFilename,'\\'));
       }
 
       // Concat all filenames to one buffer
       char *p = listfile_data = (char*) malloc (sizeof(char) * (total_size+1));
-      for (UINT i = 0; i < numFiles; i++)
+      for (int i = 0; i < numFiles; i++)
       {
         DragQueryFile ((HDROP)m_stgMedium.hGlobal, i, WSelectedFilename, MY_FILENAME_MAX);
         WideCharToMultiByte (CP_UTF8, 0, WSelectedFilename, -1, SelectedFilename, MY_FILENAME_MAX, NULL, NULL);
@@ -593,7 +645,7 @@ STDMETHODIMP CShellExt::QueryContextMenu(HMENU _hMenu, UINT _nIndex, UINT _idCmd
         p = strchr(p, '\0');
       }
 
-      if (lua_pcall(L, numFiles, 0, 0) != 0)
+      if (lua_pcall(L, 1, 0, 0) != 0)
         return 0;////error
         ;//error(L, "error running function `f': %s",
          //        lua_tostring(L, -1));
@@ -782,15 +834,15 @@ STDMETHODIMP CShellExt::RunProgram (HWND hParent, LPCSTR pszWorkingDir, LPCSTR c
   TCHAR *CurrentDirW = (TCHAR*) malloc (sizeof(TCHAR) * MY_FILENAME_MAX);
   MultiByteToWideChar (CP_UTF8, 0, SelectedFilename, -1, CurrentDirW, MY_FILENAME_MAX);
 
-  // Данные, которые нужно записать во временный файл
+  // тАЮ┬а┬н┬н╨╗╥Р, ╨Д┬о╨▓┬о╨░╨╗╥Р ┬н╨│┬ж┬н┬о ┬з┬а╨З╨Б╨▒┬а╨▓╨╝ ╤Ю┬о ╤Ю╨░╥Р┬м╥Р┬н┬н╨╗┬й ╨┤┬а┬й┬л
   char *data_to_write = NULL;
   if (strlen(cmd0) > MY_CMDLINE_MAX)
   {
     char *p = cmd0[0]=='"'? strchr((char*)cmd0+1, '"')+1 : strchr((char*)cmd0, ' ');
-    // Превратить команду в "freearc @cmd"
+    // ╨П╨░╥Р╤Ю╨░┬а╨▓╨Б╨▓╨╝ ╨Д┬о┬м┬а┬н┬д╨│ ╤Ю "freearc @cmd"
     sprintf (cmdBuf, "%.*s @{listfile}", p-cmd0, cmd0);
     cmd0 = cmdBuf;
-    // Записать остаток команды во временный файл
+    // тАб┬а╨З╨Б╨▒┬а╨▓╨╝ ┬о╨▒╨▓┬а╨▓┬о╨Д ╨Д┬о┬м┬а┬н┬д╨╗ ╤Ю┬о ╤Ю╨░╥Р┬м╥Р┬н┬н╨╗┬й ╨┤┬а┬й┬л
     while (*p==' ')  p++;
     data_to_write = p;
   }
@@ -834,7 +886,7 @@ STDMETHODIMP CShellExt::RunProgram (HWND hParent, LPCSTR pszWorkingDir, LPCSTR c
   if (CreateProcessW (NULL, cmdW, NULL, NULL, FALSE, 0, NULL, CurrentDirW, &si, &pi)) {
     CloseHandle (pi.hThread);
 
-    // Если есть файл, который нужно стереть после выполнения команды
+    // тАж╨▒┬л╨Б ╥Р╨▒╨▓╨╝ ╨┤┬а┬й┬л, ╨Д┬о╨▓┬о╨░╨╗┬й ┬н╨│┬ж┬н┬о ╨▒╨▓╥Р╨░╥Р╨▓╨╝ ╨З┬о╨▒┬л╥Р ╤Ю╨╗╨З┬о┬л┬н╥Р┬н╨Б╨┐ ╨Д┬о┬м┬а┬н┬д╨╗
     if (listfile)
     {
       Param *param = (Param*) malloc(sizeof(Param));

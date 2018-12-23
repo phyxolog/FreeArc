@@ -44,6 +44,7 @@
         else
             printf ("MM compression? ha-ha, forget about this!");
 
+   PS РґР»СЏ FAR: РІРЅРёР·Сѓ РµСЃС‚СЊ СЂСѓСЃСЃРєРёРµ РєРѕРјРјРµРЅС‚Р°СЂРёРё
 */
 
 // to do:
@@ -151,7 +152,7 @@ inline void Model::lcount (int channel, unsigned long x)
 }
 
 // It's the heart of entropy metering algorithm.
-// It maps usnigned value into its slot and count extra bits required to
+// It maps unsigned value into its slot and count extra bits required to
 // encode values in this slot. In order to better calculate entropy,
 // each of first 256 values has its individual slot (in particular,
 // this allows to precisely calculate entropy of original file using order-0
@@ -184,7 +185,7 @@ void Model::calc_results()
 
         for(int i=0;i<STATSIZE;i++)
             if (stats[N][i])
-                bits += stats[N][i] * log(double(total/stats[N][i]))/log(double(2));
+                bits += stats[N][i] * log(double(total)/stats[N][i])/log(double(2));
     }
     // Total result including additional bits required for extension codes
     result = (long)(bits/8 + xbits/8);
@@ -772,56 +773,53 @@ int detect_mm_header (int mode, void *buf, int bufsize)
 // ****************************************************************************************
 // ** Analyze data and return best guess of their type (binary, text, compressed...)
 // ****************************************************************************************
-int count_desc_order (const int *a, const int *b)   { return *b-*a; }
+int count_desc_order (const void *a, const void *b)   { return *(int*)b - *(int*)a; }
 
 void detect_datatype (BYTE *buf, int bufsize, char *type)
 {
-    // Вычисляем распределение частот символов и одновременно..
+    // Р’С‹С‡РёСЃР»СЏРµРј СЂР°СЃРїСЂРµРґРµР»РµРЅРёРµ С‡Р°СЃС‚РѕС‚ СЃРёРјРІРѕР»РѕРІ Рё РѕРґРЅРѕРІСЂРµРјРµРЅРЅРѕ..
     int count[256];  iterate(256, count[i]=0);
-    // ..ищем матчи с помощью простой LZ-схемы и определяем долю REPDIST кодов среди них
+    // ..РёС‰РµРј РјР°С‚С‡Рё СЃ РїРѕРјРѕС‰СЊСЋ РїСЂРѕСЃС‚РѕР№ LZ-СЃС…РµРјС‹ Рё РѕРїСЂРµРґРµР»СЏРµРј РґРѕР»СЋ REPDIST РєРѕРґРѕРІ СЃСЂРµРґРё РЅРёС…
     int matches=0, repdists=0, sumlen=0, dist[4]={0,0,0,0};
 #define TABLE_SIZE 16384
 #define hash(p)  (value16(p) % TABLE_SIZE)
-    BYTE **table = (BYTE**) calloc(TABLE_SIZE, sizeof(BYTE*));
+    BYTE *table[TABLE_SIZE];  iterate(TABLE_SIZE, table[i]=NULL);
     if (bufsize>10) for (BYTE *p=buf; p<buf+bufsize-10; p++) {
-       BYTE *q = table[hash(p)];
-       if (q && value16(p)==value16(q)) {
-           if (p-q<256) {  // собираем статистику только по матчам с дистанцией <256
-               matches++;
-               int x=p-q;
-               for (int i=0; i<elements(dist); i++) {
-                   int y=dist[i];  dist[i]=x;  x=y;
-                   if (x==p-q)  {repdists++; break;}
-               }
-           }
-           // Пропускаем найденный матч, не забывая обновлять счётчик/поисковый хеш
-           BYTE *o=p;
-           while (value32(p)==value32(q)  &&  p<buf+bufsize-10)
-              count[p[0]]++, table[hash(p+0)]=p,
-              count[p[1]]++, table[hash(p+1)]=p+1,
-              count[p[2]]++, table[hash(p+2)]=p+2,
-              count[p[3]]++, table[hash(p+3)]=p+3,
-              p+=4, q+=4;
-           while (*p==*q  &&  p<buf+bufsize-10)  count[*p]++, table[hash(p)]=p, p++, q++;  count[*p]++;
-           if (o-q<256)  sumlen += p-o;
-       } else {
-           count[*p]++,  table[hash(p)] = p;    // матч не найден
-       }
-
+        BYTE *q = table[hash(p)];
+        if (q && value16(p)==value16(q)) {
+            if (p-q<256) {  // СЃРѕР±РёСЂР°РµРј СЃС‚Р°С‚РёСЃС‚РёРєСѓ С‚РѕР»СЊРєРѕ РїРѕ РјР°С‚С‡Р°Рј СЃ РґРёСЃС‚Р°РЅС†РёРµР№ <256
+                matches++;
+                int x=p-q;
+                for (int i=0; i<elements(dist); i++) {
+                    int y=dist[i];  dist[i]=x;  x=y;
+                    if (x==p-q)  {repdists++; break;}
+                }
+            }
+            // РџСЂРѕРїСѓСЃРєР°РµРј РЅР°Р№РґРµРЅРЅС‹Р№ РјР°С‚С‡, РЅРµ Р·Р°Р±С‹РІР°СЏ РѕР±РЅРѕРІР»СЏС‚СЊ СЃС‡С‘С‚С‡РёРє/РїРѕРёСЃРєРѕРІС‹Р№ С…РµС€
+            BYTE *o=p;
+            while (value32(p)==value32(q)  &&  p<buf+bufsize-10) {
+                count[p[0]]++; table[hash(p+0)]=p;
+                count[p[1]]++; table[hash(p+1)]=p+1;
+                count[p[2]]++; table[hash(p+2)]=p+2;
+                count[p[3]]++; table[hash(p+3)]=p+3;
+                p+=4; q+=4;
+            }
+            while (*p==*q  &&  p<buf+bufsize-10)  count[*p]++, table[hash(p)]=p, p++, q++;  count[*p]++;
+            if (o-q<256)  sumlen += p-o;
+        } else {
+            count[*p]++,  table[hash(p)] = p;    // match not found
+        }
     }
-    free(table);
 #undef TABLE_SIZE
 #undef hash
 
-    // Сжатие order-0 моделью
+    // РЎР¶Р°С‚РёРµ order-0 РјРѕРґРµР»СЊСЋ
     double order0=0;
     for (int i=0; i<256; i++)
-    {
         if (count[i])
             order0 += count[i] * log(double(bufsize/count[i]))/log(double(2)) / 8;
-    }
 
-    // Кол-во символов, занимающих 90% объёма текста
+    // РљРѕР»-РІРѕ СЃРёРјРІРѕР»РѕРІ, Р·Р°РЅРёРјР°СЋС‰РёС… 90% РѕР±СЉС‘РјР° С‚РµРєСЃС‚Р°
     int sums=0, total=bufsize, normal_chars=256;
     qsort (count, 256, sizeof(*count),
            (int (*)(const void*, const void*)) count_desc_order);
@@ -836,25 +834,22 @@ void detect_datatype (BYTE *buf, int bufsize, char *type)
         }
     }
 
-    // Тип данных: $compressed если не сжимается ни order-0 ни lz77.
-    //             $text если активных символов от 17 до 80, число повторов дистанций невелико и lz-матчи составляют хотя бы 10% данных
-    strcpy (type, buf==NULL                                 ? "$compressed $text" :  // list of data types this procedure is able to recognize
+    // РўРёРї РґР°РЅРЅС‹С…: $precomp/$compressed РµСЃР»Рё РЅРµ СЃР¶РёРјР°РµС‚СЃСЏ РЅРё order-0 РЅРё lz77.
+    //             $text РµСЃР»Рё Р°РєС‚РёРІРЅС‹С… СЃРёРјРІРѕР»РѕРІ РѕС‚ 17 РґРѕ 80, С‡РёСЃР»Рѕ РїРѕРІС‚РѕСЂРѕРІ РґРёСЃС‚Р°РЅС†РёР№ РЅРµРІРµР»РёРєРѕ Рё lz-РјР°С‚С‡Рё СЃРѕСЃС‚Р°РІР»СЏСЋС‚ С…РѕС‚СЏ Р±С‹ 10% РґР°РЅРЅС‹С…
+    strcpy (type, buf==NULL                                 ? "$precomp $compressed $text" :  // list of data types this procedure is able to recognize
 
                   order0 > 0.95*bufsize
                     // && matches < bufsize/100
-                    && sumlen < 0.10*bufsize                ? "$compressed" :
+                    && sumlen < 0.10*bufsize                ? "$precomp $compressed" :
 
                   17<=normal_chars && normal_chars<=80
                     // && matches < bufsize/6
                     && repdists < 0.20*matches
                     && sumlen   > 0.10*bufsize              ? "$text" :
                                                               "default");
-    //if(!bufsize) printf ("\n");
-    //if(bufsize)  printf (" %8s %5d %5.2lf%% ", type, bufsize, textlike*100);
-    //if(normal)   printf ("    %5.0lf %5.0lf %5.2lf%% %5.2lf \n", double(normal), double(used_chars), rare*100, q);
     //if(bufsize) printf (" %8s %d\n", type, normal_chars);
     //if(bufsize)  printf (" %8s %5.2lf%% %5d %5.2lf%% %5.0lf %5.2lf %5.2lf%%\n", type, order0/bufsize*100, normal_chars, double(repdists+1)/(matches+1)*100, double(matches), double(sumlen)/(matches+1), double(sumlen)/(bufsize+1)*100);
-    //(printf("\n\n\nSTAT: normal_chars=%d, repdists=%d, matches=%d, sumlen=%d, bufsize=%d\n\n %*.*s\n", normal_chars, repdists, matches, sumlen, bufsize, bufsize, bufsize, buf), "default"));
+    //printf("STAT: normal_chars=%d, repdists=%d, matches=%d, sumlen=%d, bufsize=%d\n\n", normal_chars, repdists, matches, sumlen, bufsize, bufsize, bufsize, buf);
 }
 
 #endif  // !defined (FREEARC_DECOMPRESS_ONLY)
@@ -867,7 +862,7 @@ void detect_datatype (BYTE *buf, int bufsize, char *type)
 // demonstrates more complex technique of gathering statistics
 // while processing file in small chunks
 
-// Вычисление времени работы алгоритма
+// Р’С‹С‡РёСЃР»РµРЅРёРµ РІСЂРµРјРµРЅРё СЂР°Р±РѕС‚С‹ Р°Р»РіРѕСЂРёС‚РјР°
 #include <io.h>
 #include <windows.h>
 static LARGE_INTEGER Frequency, PerformanceCountStart, PerformanceCountEnd;
@@ -1082,14 +1077,21 @@ else if (lz77_mode)   // Try LZ77 model with various hashsize and hashchain leng
 else if (det_mode)   // Binary/text/compressed detection mode
 {
     init_timer();
-    char result[100];
-    for (int i=0; i+100<filesize; i+=65536)
+    char result[100];  const int MAX_TYPES=10;  char results[MAX_TYPES][100]={""};  int counters[MAX_TYPES]={0};
+    for (int i=0; i+100<filesize; i+=65536) {
         detect_datatype ((BYTE*)buf+i, mymin(65536,filesize-i), result);
-    //detect_datatype ((BYTE*)buf, filesize, result);
-    //printf("%.3lf sec", timer());
+        for (int j=0; j<MAX_TYPES; j++)
+            if (strequ (results[j], result)  ||  strequ (results[j], ""))
+                {strcpy(results[j], result);  counters[j]++;  break;}
+    }
+    printf("64kb blocks detection in %.3lf sec:\n", timer());
+    for (int j=0; j<MAX_TYPES; j++)
+        if (!strequ (results[j], ""))
+            printf("  %s %d\n", results[j], counters[j]);
+    detect_datatype ((BYTE*)buf, filesize, result);
+    printf("Entire file detection: %s in %.3lf sec\n", result, timer());
 }
     return 0;
 }
 
 #endif
-

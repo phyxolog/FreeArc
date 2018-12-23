@@ -1,0 +1,460 @@
+<html>
+
+<head>
+<meta http-equiv=Content-Type content="text/html; charset=us-ascii">
+<meta name=Generator content="Microsoft Word 12 (filtered)">
+<title>FreeArc GUI</title>
+<style>
+<!--
+ /* Font Definitions */
+ @font-face
+	{font-family:Wingdings;
+	panose-1:5 0 0 0 0 0 0 0 0 0;}
+@font-face
+	{font-family:"Cambria Math";
+	panose-1:2 4 5 3 5 4 6 3 2 4;}
+@font-face
+	{font-family:Cambria;
+	panose-1:2 4 5 3 5 4 6 3 2 4;}
+@font-face
+	{font-family:Calibri;
+	panose-1:2 15 5 2 2 2 4 3 2 4;}
+ /* Style Definitions */
+ p.MsoNormal, li.MsoNormal, div.MsoNormal
+	{margin-top:0cm;
+	margin-right:0cm;
+	margin-bottom:10.0pt;
+	margin-left:0cm;
+	line-height:115%;
+	font-size:11.0pt;
+	font-family:"Times New Roman","serif";}
+h1
+	{mso-style-link:"Heading 1 Char";
+	margin-top:24.0pt;
+	margin-right:0cm;
+	margin-bottom:0cm;
+	margin-left:0cm;
+	margin-bottom:.0001pt;
+	line-height:115%;
+	page-break-after:avoid;
+	font-size:14.0pt;
+	font-family:"Cambria","serif";
+	color:#365F91;}
+h2
+	{mso-style-link:"Heading 2 Char";
+	margin-top:10.0pt;
+	margin-right:0cm;
+	margin-bottom:0cm;
+	margin-left:0cm;
+	margin-bottom:.0001pt;
+	line-height:115%;
+	page-break-after:avoid;
+	font-size:13.0pt;
+	font-family:"Cambria","serif";
+	color:#4F81BD;}
+h3
+	{mso-style-link:"Heading 3 Char";
+	margin-top:10.0pt;
+	margin-right:0cm;
+	margin-bottom:0cm;
+	margin-left:0cm;
+	margin-bottom:.0001pt;
+	line-height:115%;
+	page-break-after:avoid;
+	font-size:11.0pt;
+	font-family:"Cambria","serif";
+	color:#4F81BD;}
+a:link, span.MsoHyperlink
+	{color:blue;
+	text-decoration:underline;}
+a:visited, span.MsoHyperlinkFollowed
+	{color:purple;
+	text-decoration:underline;}
+p.MsoListParagraph, li.MsoListParagraph, div.MsoListParagraph
+	{margin-top:0cm;
+	margin-right:0cm;
+	margin-bottom:10.0pt;
+	margin-left:36.0pt;
+	line-height:115%;
+	font-size:11.0pt;
+	font-family:"Times New Roman","serif";}
+span.Heading1Char
+	{mso-style-name:"Heading 1 Char";
+	mso-style-link:"Heading 1";
+	font-family:"Cambria","serif";
+	color:#365F91;
+	font-weight:bold;}
+span.Heading2Char
+	{mso-style-name:"Heading 2 Char";
+	mso-style-link:"Heading 2";
+	font-family:"Cambria","serif";
+	color:#4F81BD;
+	font-weight:bold;}
+span.Heading3Char
+	{mso-style-name:"Heading 3 Char";
+	mso-style-link:"Heading 3";
+	font-family:"Cambria","serif";
+	color:#4F81BD;
+	font-weight:bold;}
+p.msolistparagraphcxspfirst, li.msolistparagraphcxspfirst, div.msolistparagraphcxspfirst
+	{mso-style-name:msolistparagraphcxspfirst;
+	margin-top:0cm;
+	margin-right:0cm;
+	margin-bottom:0cm;
+	margin-left:36.0pt;
+	margin-bottom:.0001pt;
+	line-height:115%;
+	font-size:11.0pt;
+	font-family:"Times New Roman","serif";}
+p.msolistparagraphcxspmiddle, li.msolistparagraphcxspmiddle, div.msolistparagraphcxspmiddle
+	{mso-style-name:msolistparagraphcxspmiddle;
+	margin-top:0cm;
+	margin-right:0cm;
+	margin-bottom:0cm;
+	margin-left:36.0pt;
+	margin-bottom:.0001pt;
+	line-height:115%;
+	font-size:11.0pt;
+	font-family:"Times New Roman","serif";}
+p.msolistparagraphcxsplast, li.msolistparagraphcxsplast, div.msolistparagraphcxsplast
+	{mso-style-name:msolistparagraphcxsplast;
+	margin-top:0cm;
+	margin-right:0cm;
+	margin-bottom:10.0pt;
+	margin-left:36.0pt;
+	line-height:115%;
+	font-size:11.0pt;
+	font-family:"Times New Roman","serif";}
+span.ButtonChar
+	{mso-style-name:"Button Char";
+	mso-style-link:Button;}
+p.Button, li.Button, div.Button
+	{mso-style-name:Button;
+	mso-style-link:"Button Char";
+	margin-top:0cm;
+	margin-right:0cm;
+	margin-bottom:10.0pt;
+	margin-left:0cm;
+	line-height:115%;
+	font-size:11.0pt;
+	font-family:"Times New Roman","serif";}
+p.msopapdefault, li.msopapdefault, div.msopapdefault
+	{mso-style-name:msopapdefault;
+	margin-right:0cm;
+	margin-bottom:10.0pt;
+	margin-left:0cm;
+	line-height:115%;
+	font-size:12.0pt;
+	font-family:"Times New Roman","serif";}
+p.msochpdefault, li.msochpdefault, div.msochpdefault
+	{mso-style-name:msochpdefault;
+	margin-right:0cm;
+	margin-left:0cm;
+	font-size:10.0pt;
+	font-family:"Times New Roman","serif";}
+.MsoChpDefault
+	{font-size:10.0pt;}
+.MsoPapDefault
+	{margin-bottom:10.0pt;
+	line-height:115%;}
+@page Section1
+	{size:595.3pt 841.9pt;
+	margin:2.0cm 42.5pt 2.0cm 3.0cm;}
+div.Section1
+	{page:Section1;}
+-->
+</style>
+
+</head>
+
+<body lang=RU link=blue vlink=purple>
+
+<div class=Section1>
+
+<h1><span lang=EN-US style='font-size:11.0pt;line-height:115%;font-family:"Calibri","sans-serif";
+color:windowtext;font-weight:normal'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+</span><span lang=EN-US>Introduction</span></h1>
+
+<p class=MsoNormal><span lang=EN-US>FreeArc allows browsing disk and archive
+contents (only in its own .arc format) and performs the following operations on
+archives:</span></p>
+
+<p class=MsoListParagraph style='text-indent:-18.0pt'><span lang=EN-US
+style='font-family:Symbol'>&middot;</span><span lang=EN-US style='font-size:
+7.0pt;line-height:115%'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span><span
+lang=EN-US>Create archives and add new files to existing archives</span></p>
+
+<p class=MsoListParagraph style='text-indent:-18.0pt'><span lang=EN-US
+style='font-family:Symbol'>&middot;</span><span lang=EN-US style='font-size:
+7.0pt;line-height:115%'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span><span
+lang=EN-US>Modify archives (recompress, encrypt/decrypt, change size of
+Recovery Record and so on)</span></p>
+
+<p class=MsoListParagraph style='text-indent:-18.0pt'><span lang=EN-US
+style='font-family:Symbol'>&middot;</span><span lang=EN-US style='font-size:
+7.0pt;line-height:115%'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span><span
+lang=EN-US>Join several archives in one bigger archive</span></p>
+
+<p class=MsoListParagraph style='text-indent:-18.0pt'><span lang=EN-US
+style='font-family:Symbol'>&middot;</span><span lang=EN-US style='font-size:
+7.0pt;line-height:115%'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span><span
+lang=EN-US>Display information about archive statistics</span></p>
+
+<p class=MsoListParagraph style='text-indent:-18.0pt'><span lang=EN-US
+style='font-family:Symbol'>&middot;</span><span lang=EN-US style='font-size:
+7.0pt;line-height:115%'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span><span
+lang=EN-US>Delete files from archive</span></p>
+
+<p class=MsoListParagraph style='text-indent:-18.0pt'><span lang=EN-US
+style='font-family:Symbol'>&middot;</span><span lang=EN-US style='font-size:
+7.0pt;line-height:115%'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span><span
+lang=EN-US>Test archives</span></p>
+
+<p class=MsoListParagraph style='text-indent:-18.0pt'><span lang=EN-US
+style='font-family:Symbol'>&middot;</span><span lang=EN-US style='font-size:
+7.0pt;line-height:115%'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span><span
+lang=EN-US>Extract files from archives to disk</span></p>
+
+<p class=MsoNormal><span lang=EN-US>As soon as FreeArc have started performing
+some operation (compression, extracting&#8230;), you may send operation to
+background by clicking on the <span class=ButtonChar><span style='background:
+aqua'>Background</span></span> button and continue to work with FreeArc. You
+may also switch to main FreeArc window by simply clicking on it or move
+progress indicator window aside.</span></p>
+
+<p class=MsoNormal><span lang=EN-US>While one operation continues to execute,
+you may run second, third&#8230; operations. They all will be placed into queue
+and executed in just the same order as they were run. </span></p>
+
+<p class=MsoNormal><span lang=EN-US>All text entries in program keep their
+entry history. Input data are saved to the freearc.history file right at the OK
+button press and restored when dialog is open again. As the result, input
+history is never lost and is global for all running copies of FreeArc. The only
+exceptions to this rule are passwords &#8211; they are saved only in RAM and
+need to be reentered on each next program run.</span></p>
+
+<p class=MsoNormal><span lang=EN-US>In the upper part of file manager window
+you will find a navigation bar. Here you can enter name of directory or archive
+(or even directory inside archive) and then press Enter to go there directly.
+In particular, it&#8217;s the only way to</span><span style='background:yellow'>
+open archive directly from Internet</span><span lang=EN-US>. Input history of
+this line automatically saves names of all the archives you ever browsed, in
+addition you can add to history name of current directory (or directory inside
+archive) by clicking </span><span class=ButtonChar><span style='background:
+aqua'>Save</span></span><span lang=EN-US> button. This history is also saved to
+freearc.history file and therefore is global, FreeArc rereads it on every
+directory change and also when </span><span class=ButtonChar><span
+style='background:aqua'>Refresh</span></span><span lang=EN-US> button is
+clicked. Due to this, you can imitate Drag&amp;Drop technology by running two FreeArc
+copies simultaneously. In one copy you save current directory/archive using </span><span
+class=ButtonChar><span style='background:aqua'>Save</span></span><span
+lang=EN-US> button and then in other copy you can select saved path from the
+navibar, Extract output path, or Add output archive comboboxes. In the same
+manner, you can easily select in the navibar name of archive just created or
+path where files were extracted.</span></p>
+
+<h2><span lang=EN-US>Archive creation and adding new files to archive</span></h2>
+
+<p class=MsoNormal><span lang=EN-US>For compression, you should select files
+and/or directories on disk (not inside another archive!) and click the </span><span
+class=ButtonChar><span style='background:aqua'>Add</span></span><span
+lang=EN-US> button. If nothing is selected &#8211; all the files and
+directories in current directory will be compressed. The Compression dialog
+will appear where you can select compression level (or enter custom compression
+mode), encryption options and so on. You can hide whole sections of this dialog
+and this will mean that appropriate group of settings will not be applied at
+all. For example, Encryption section is hidden by default which means that
+encryption will not be used. But as soon as you&#8217;ve open this section
+&#8211; encryption is enabled, with all the settings you see. That means that
+you can enter all your preferences only once and then just enable them where
+required by opening appropriate sections of compression dialog &#8211; all the
+settings, except for passwords, are even kept between FreeArc runs.</span></p>
+
+<p class=MsoNormal><span lang=EN-US>Entry field for output archive name may
+also include path inside the archive &#8211; this allows you to quickly
+compress files exactly to the place required just by selecting appropriate
+entry from the history.</span></p>
+
+<h3><span lang=EN-US>Encryption</span></h3>
+
+<p class=MsoNormal><span lang=EN-US>Although for such popular encryption
+algorithms as AES, there are no any known weaknesses, small possibility still
+exists that such weaknesses (i.e. the way to decrypt data without knowing
+password) will be found in future. It&#8217;s the reason why FreeArc
+additionally supports 3 another best-reputed encryption algorithms
+&#8211;Serpent</span>, <span lang=EN-US>Twofish and Blowfish</span>,<span
+lang=EN-US> and even allows encrypting data by several algorithms sequentially
+(i.e. to encrypt output of first algorithm by second one and so on). File
+encrypted by several algorithms may be &#8220;cracked&#8221; only if weaknesses
+will be found in every algorithm involved. Moreover FreeArc allows to raise
+security strength by increasing number of rounds performed, using say
+&#8220;aes:r100&#8221; as Encryption algorithm specification. Of course, both
+methods of increasing encryption security decreases its speed, but you may not
+worry too much taking into account that single algorithm with standard settings
+process 20mb/s even on </span>1Ghz CPU.</p>
+
+<p class=MsoNormal><span lang=EN-US>Next, key size in AES, Serpent and Twofish
+&#8211; up to 256 bits, and in Blowfish it is up to 448 bits. This means that
+for full utilization of security level that AES provides, you need to enter
+password of ~50 random chars, or about 200-300 chars of meaningful text. Are
+you really using passwords of such length? </span><span lang=EN-US
+style='font-family:Wingdings'>J</span><span lang=EN-US> So, in order to really
+provide AES security level, FreeArc supports use of keyfiles &#8211; it&#8217;s
+actually large passwords written to external file. The button </span><span
+class=ButtonChar><span style='background:aqua'>Create</span></span><span
+lang=EN-US> generates 1 kb of cryptographically strong random data and saves
+them into the file you&#8217;ve specified. With encryption using keyfiles, your
+data are protected from any &#8220;password crackers&#8221; which just
+enumerate short passwords or words from dictionary &#8211; such technique
+can&#8217;t be used to fit a 1kb of cryptographically strong random password.
+The only way that remains to crack your encryption is to check all the 2^256
+possible keys, or to find weakness in encryption algorithm used (all the
+algorithms if several are used). Good luck! </span><span lang=EN-US
+style='font-family:Wingdings'>J</span><span lang=EN-US> You may use password
+and keyfile together.</span></p>
+
+<p class=MsoNormal><span lang=EN-US>Of course, you should keep keyfiles in
+highly secure place. One possible solution may be to use flash keys which
+supports physical protection (by means of scanning fingerprint or smth like
+this).</span></p>
+
+<p class=MsoNormal><span lang=EN-US>Also I recommend you to enable encryption
+of archive directories &#8211; this prevents intruder from knowing even names
+of files in the archive. You can easily browse contents of archives with
+encrypted directories/contents as soon as you&#8217;ve entered all the
+passwords and keyfiles required to decrypt them into the Decryption section.
+You can fill all these data in the Settings dialog box &#8211; of course,
+passwords need to be reentered every time you restart FreeArc.</span></p>
+
+<h3><span lang=EN-US>Decryption</span></h3>
+
+<p class=MsoNormal><span lang=EN-US>Passwords and keyfiles, specified in this
+section, will be used only for decryption purposes. If you want to use the same
+password/keyfile both for encryption and decryption &#8211; you need to specify
+it both in Encryption and Decryption sections. Because Decryption settings are
+saved to disk (except for passwords which are kept until FreeArc exit), you may
+enter in this section (in the Settings dialog) all the passwords/keyfiles that
+may be used in your archives and forget about any decryption problems until
+next program run. Even when this section is closed (hidden), these
+passwords/keyfiles are still used for decryption. So you will need to open this
+section only in two cases &#8211; when you actually want to edit the settings and
+when you need to decrypt archive using </span><span class=ButtonChar><span
+style='background:aqua'>Modify</span></span><span lang=EN-US> command (see
+below).</span></p>
+
+<h3><span lang=EN-US>Data protection</span></h3>
+
+<p class=MsoNormal><span lang=EN-US>Like RAR, FreeArc can recover archives,
+broken due to errors in magnetic storage or during transmission, using Recovery
+Record &#8211; special data appended to the archive. In this section you may
+add RR, or delete it from existing archive, and even specify exact size of RR
+that should be added. By default, program adds RR sized as about 1% of archive
+size. You can specify exact RR size in percents or bytes. </span></p>
+
+<p class=MsoNormal><span lang=EN-US>If you use &#8220;0%&#8221; setting, then
+minimal Recovery Record is added, sufficient only for restoring archives over
+Internet (or, to be exact, by copying from unbroken original), size of such
+minimal RR is only 0.1% of archive size. Such setting is ideal for downloadable
+archives &#8211; while it virtually doesn&#8217;t increase archive size, it
+still allows recovering broken download by redownloading just the small amount
+of 4kb sectors which were actually broken.</span></p>
+
+<h2><span lang=EN-US>Modify archive</span></h2>
+
+<p class=MsoNormal><span lang=EN-US>Unlike other archivers, FreeArc is able to
+change everything in existing archive &#8211; from compression level to
+encryption settings. To do it, you need to select one or more archives in the
+file manager, or enter into archive, and click the </span><span
+class=ButtonChar><span style='background:aqua'>Modify</span></span><span
+lang=EN-US> button. As usual, in order to enable some group of settings, you
+should unfold the appropriate section in dialog. If you need to recompress
+archive data &#8211; unfold </span><span class=ButtonChar><span
+style='background:aqua'>Compression</span></span><span lang=EN-US> section and
+select here compression algorithm you want to apply. If you need to encrypt or
+decrypt data &#8211; unfold the </span><span class=ButtonChar><span
+style='background:aqua'>Encryption</span></span><span lang=EN-US> or </span><span
+class=ButtonChar><span style='background:aqua'>Decryption</span></span><span
+lang=EN-US> section, appropriately. If you need to reencrypt archive &#8211;
+unfold both sections and enter old password/keyfile into Decryption section and
+new ones &#8211; into Encryption section. And so on. Please note that at this
+moment recompression without reencryption and reencryption without recompression
+aren&#8217;t possible (former due to fundamental laws, and later is just a
+technical limitation of current program version).</span></p>
+
+<p class=MsoNormal><span lang=EN-US>If several archives were selected before
+performing the operations &#8211; all them will be recompressed, reencrypted
+and so on. If no files were selected, then FreeArc will process all the
+archives in current directory.</span></p>
+
+<h2><span lang=EN-US>Joining archives together</span></h2>
+
+<p class=MsoNormal><span lang=EN-US>FreeArc is also able to join several
+archives together &#8211; and does it much faster than decompressing and then compressing
+the data again. In this operation, duplicates (i.e. files with repeated names
+are automatically excluded from resulting archive). If files are added to
+existing archive then new files will have higher priority (i.e. we update files
+in old archive with new ones). In order to perform this operation, you need to
+select archives to join in the file manager and select </span><span
+class=ButtonChar><span style='background:aqua'>Join</span></span> <span
+lang=EN-US>operation from the </span><span class=ButtonChar><span
+style='background:aqua'>File</span></span><span lang=EN-US> menu. If no files
+are selected, then all archives in current directory will be joined.</span></p>
+
+<h2><span lang=EN-US>Obtaining archive information/statistics </span></h2>
+
+<p class=MsoNormal><span lang=EN-US>The </span><span class=ButtonChar><span
+style='background:aqua'>ArcInfo</span></span><span lang=EN-US> command shows
+information about current archive. Ask me if you don&#8217;t understand some
+fields here </span><span lang=EN-US style='font-family:Wingdings'>J</span><span
+lang=EN-US>. Pay a special attention to the </span><span class=ButtonChar><span
+style='background:aqua'>Decompression memory</span></span> <span lang=EN-US>field,
+which shows how much RAM will be used for decompression process. If it&#8217;s
+greater that &frac34; of your total RAM size &#8211; this archive can&#8217;t
+be decompressed on your computer.</span></p>
+
+<h2><span lang=EN-US>File deletion</span></h2>
+
+<p class=MsoNormal><span lang=EN-US>FreeArc is able to delete files and
+directories from archives and files from disk. Deletion from archive is one
+more archive operation which is also queued and performed in order (its
+execution may be lengthy because it may need to recompress data in solid blocks
+where only part of files was deleted), but FreeArc is so smart that it
+&#8220;looks into the future&#8221; and immediately removes from the screen
+names of files/directories that will be deleted.</span></p>
+
+<h2><span lang=EN-US>Testing archives </span></h2>
+
+<p class=MsoNormal><span lang=EN-US>Queues testing of current archive, or
+selected files in current archive (if any files are selected), or all archives
+in the current directory, or archives selected.</span></p>
+
+<h2><span lang=EN-US>Archives extraction</span></h2>
+
+<p class=MsoNormal><span lang=EN-US>Rules of selection of files/archives to
+extract are just the same as for testing command.</span></p>
+
+<p class=MsoNormal><b><span lang=EN-US style='font-size:13.0pt;line-height:
+115%;font-family:"Cambria","serif";color:#4F81BD'>&nbsp;</span></b></p>
+
+<p class=MsoNormal><b><span lang=EN-US style='font-size:13.0pt;line-height:
+115%;font-family:"Cambria","serif";color:#4F81BD'>Settings</span></b></p>
+
+<p class=MsoNormal><span lang=EN-US>The Settings dialog allows you to select
+language of program interface, </span><span class=ButtonChar><span
+style='background:aqua'>Import</span></span><span lang=EN-US> language file
+created for 7-zip, and </span><span class=ButtonChar><span style='background:
+aqua'>Edit</span></span> <span lang=EN-US>language file selected.</span></p>
+
+<p class=MsoNormal><span lang=EN-US>Also you can enter here all the decryption
+passwords/keyfiles. Of course, you need to reenter passwords again on each FreeArc
+restart &#8211; these are not saved to disk.</span></p>
+
+<p class=MsoNormal><span lang=EN-US>Finally, you can specify here name of
+logfile where command line, statistics and error messages for every operation
+performed will be saved.</span></p>
+
+</div>
+
+</body>
+
+</html>

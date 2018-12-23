@@ -1,73 +1,86 @@
-;[English]
+п»ї;[English]
 ;Example of using unarc.dll for decompression of FreeArc archives with displaying of progress indicator in Inno Setup window.
 ;In order to use the script compile it and put *.arc archives to the same directory as installer executable before running it.
 ;The script requires Inno Setup QuickStart Pack 5.2.3 and above (http://files.jrsoftware.org)
 ;You will also need InnoCallback.dll that may be found at the http://www.sherlocksoftware.org/page.php?id=54
 
 ;[Russian]
-;Пример распаковки FreeArc архива при помощи unarc.dll, с отображением прогресса распаковки в окне Inno Setup.
-;Для использования скрипта откомпилируйте его и поместите архивы *.arc в один каталог с инсталятором перед тем как запустить его.
-;Скрипт совместим с Inno Setup QuickStart Pack 5.2.3 и выше (http://files.jrsoftware.org)
-;Вам также потребуется InnoCallback.dll (http://www.sherlocksoftware.org/page.php?id=54)
+;РџСЂРёРјРµСЂ СЂР°СЃРїР°РєРѕРІРєРё FreeArc Р°СЂС…РёРІР° РїСЂРё РїРѕРјРѕС‰Рё unarc.dll, СЃ РѕС‚РѕР±СЂР°Р¶РµРЅРёРµРј РїСЂРѕРіСЂРµСЃСЃР° СЂР°СЃРїР°РєРѕРІРєРё РІ РѕРєРЅРµ Inno Setup.
+;Р”Р»СЏ РёСЃРїРѕР»СЊР·РѕРІР°РЅРёСЏ СЃРєСЂРёРїС‚Р° РѕС‚РєРѕРјРїРёР»РёСЂСѓР№С‚Рµ РµРіРѕ Рё РїРѕРјРµСЃС‚РёС‚Рµ Р°СЂС…РёРІС‹ *.arc РІ РѕРґРёРЅ РєР°С‚Р°Р»РѕРі СЃ РёРЅСЃС‚Р°Р»СЏС‚РѕСЂРѕРј РїРµСЂРµРґ С‚РµРј РєР°Рє Р·Р°РїСѓСЃС‚РёС‚СЊ РµРіРѕ.
+;РЎРєСЂРёРїС‚ СЃРѕРІРјРµСЃС‚РёРј СЃ Inno Setup QuickStart Pack 5.2.3 Рё РІС‹С€Рµ (http://files.jrsoftware.org)
+;Р’Р°Рј С‚Р°РєР¶Рµ РїРѕС‚СЂРµР±СѓРµС‚СЃСЏ InnoCallback.dll (http://www.sherlocksoftware.org/page.php?id=54)
 
-; Версия 3.3 от Bulat Ziganshin, 13-09-2009
-;   - ускорение распаковки на 10%
-;   - FreeArcExtract() поддерживает опцию '-wPATH' для задания каталога для временных файлов
-;   - при прерывании распаковки стирает временные файлы
-;   - исправлена ошибка в unarc.dll - вылетала при распаковке с использованием временных файлов
+; Р’РµСЂСЃРёСЏ 3.6 РѕС‚ Bulat Ziganshin, ??-??-2010
+;   - РїРѕР»СЊСЃРєРёР№ Рё РЅРµРјРµС†РєРёР№ РїРµСЂРµРІРѕРґС‹, РІ СЃРІСЏР·Рё СЃ С‡РµРј СЃРєСЂРёРїС‚ РїРµСЂРµРІРµРґС‘РЅ РІ РєРѕРґРёСЂРѕРІРєСѓ UTF-8
 ;
-; Версия 3.2 от Bulat Ziganshin, 31-07-2009
-;   - исправлена unarc.dll - теперь она не вылетает на сбойных архивах
+; Р’РµСЂСЃРёСЏ 3.5 РѕС‚ Bulat Ziganshin, 21-12-2009
+;   - РїРѕРґРґРµСЂР¶РєР° РѕРїС†РёР№ -ap/-ld/-cfg РІ FreeArcExtract()
+;   - СѓСЃРєРѕСЂРµРЅР° СЂР°СЃРїР°РєРѕРІРєР° РїСЂРё Р±РѕР»СЊС€РѕРј РєРѕР»РёС‡РµСЃС‚РІРµ wav-С„Р°Р№Р»РѕРІ (РјРµС‚РѕРґ TTA)
+;   - РјРѕР¶РЅРѕ РїРµСЂРµРґР°РІР°С‚СЊ NULL РІ РєР°С‡РµСЃС‚РІРµ РїРµСЂРІРѕРіРѕ РїР°СЂР°РјРµС‚СЂР° (callback) РІ FreeArcExtract()
+;   - РёСЃРїСЂР°РІР»РµРЅР° РѕС€РёР±РєР°: РѕР±СЂР°Р±Р°С‚С‹РІР°Р»РёСЃСЊ РѕРїС†РёРё РїРѕСЃР»Рµ '--'
 ;
-; Версия 3.1 от Bulat Ziganshin, 29-07-2009
-;   - более плавный индикатор прогресса (данные из LZMA пишутся кусками по 8 мб вместо dictsize)
-;   - больше не грузятся всякие левые facompress.dll из PATH
+; Р’РµСЂСЃРёСЏ 3.4 РѕС‚ Bulat Ziganshin, 18-11-2009
+;   - СѓР»СѓС‡С€РµРЅРёРµ РІ unarc.dll - РЅРµ СЃРѕР·РґР°С‘С‚ РІСЂРµРјРµРЅРЅС‹Рµ С„Р°Р№Р»С‹ РїСЂРё СЂР°СЃРїР°РєРѕРІРєРµ rep:1gb Рё С„СЂР°РіРјРµРЅС‚РёСЂРѕРІР°РЅРЅРѕР№ РїР°РјСЏС‚Рё
+;   - РїРѕРґРґРµСЂР¶РєР° РјРµС‚РѕРґР° 4x4
 ;
-; Версия 3.0 от Bulat Ziganshin, 29-07-2009
-;   - функция ArchiveOrigSize возвращает объём данных в архиве
-;   - наименования колбэков изменены на read и write (было progress и written)
+; Р’РµСЂСЃРёСЏ 3.3 РѕС‚ Bulat Ziganshin, 13-09-2009
+;   - СѓСЃРєРѕСЂРµРЅРёРµ СЂР°СЃРїР°РєРѕРІРєРё РЅР° 10%
+;   - FreeArcExtract() РїРѕРґРґРµСЂР¶РёРІР°РµС‚ РѕРїС†РёСЋ '-wPATH' РґР»СЏ Р·Р°РґР°РЅРёСЏ РєР°С‚Р°Р»РѕРіР° РґР»СЏ РІСЂРµРјРµРЅРЅС‹С… С„Р°Р№Р»РѕРІ
+;   - РїСЂРё РїСЂРµСЂС‹РІР°РЅРёРё СЂР°СЃРїР°РєРѕРІРєРё СЃС‚РёСЂР°РµС‚ РІСЂРµРјРµРЅРЅС‹Рµ С„Р°Р№Р»С‹
+;   - РёСЃРїСЂР°РІР»РµРЅР° РѕС€РёР±РєР° РІ unarc.dll - РІС‹Р»РµС‚Р°Р»Р° РїСЂРё СЂР°СЃРїР°РєРѕРІРєРµ СЃ РёСЃРїРѕР»СЊР·РѕРІР°РЅРёРµРј РІСЂРµРјРµРЅРЅС‹С… С„Р°Р№Р»РѕРІ
 ;
-; Версия 2.1 от Bulat Ziganshin, 10-07-2009
-;   - Кнопка 'Отмена установки' теперь по расположению, размеру и надписи точно дублирует стандартную кнопку Отмена
-;   - В unarc.dll исправлена ошибка, чреватая потенциальными проблемами при распаковке множества архивов
+; Р’РµСЂСЃРёСЏ 3.2 РѕС‚ Bulat Ziganshin, 31-07-2009
+;   - РёСЃРїСЂР°РІР»РµРЅР° unarc.dll - С‚РµРїРµСЂСЊ РѕРЅР° РЅРµ РІС‹Р»РµС‚Р°РµС‚ РЅР° СЃР±РѕР№РЅС‹С… Р°СЂС…РёРІР°С…
 ;
-; Версия 2.0 от Bulat Ziganshin, 08-07-2009
-;   - Корректно отображает общий объём установки и сколько данных уже распаковано
-;   - Индикатор прогресса теперь основан на объёме распакованных и записанных на диск данных
-;   - Дополнительно отображается сколько осталось времени
-;   - FreeArcCallback вызывается не менее 100 раз в секунду, что заменяет вызов по таймеру
-;   - Добавлен placeholder для периодически выполняемого кода (в начале процедуры FreeArcCallback)
-;   - Исправлена проблема с удалением последнего распакованного файла при отмене инсталяции
-;   - Исправлена проблема с русскими именами/путями распаковываемых архивов
-;   - Кнопка 'Отменить распаковку' масштабируется в зависимости от размеров формы
-;   - Исправлено вычисление оставшегося времени (теперь отсчёт начинается в момент начала распаковки)
-;   - За пределами процесса распаковки все лишние надписи убираются с экрана
+; Р’РµСЂСЃРёСЏ 3.1 РѕС‚ Bulat Ziganshin, 29-07-2009
+;   - Р±РѕР»РµРµ РїР»Р°РІРЅС‹Р№ РёРЅРґРёРєР°С‚РѕСЂ РїСЂРѕРіСЂРµСЃСЃР° (РґР°РЅРЅС‹Рµ РёР· LZMA РїРёС€СѓС‚СЃСЏ РєСѓСЃРєР°РјРё РїРѕ 8 РјР± РІРјРµСЃС‚Рѕ dictsize)
+;   - Р±РѕР»СЊС€Рµ РЅРµ РіСЂСѓР·СЏС‚СЃСЏ РІСЃСЏРєРёРµ Р»РµРІС‹Рµ facompress.dll РёР· PATH
 ;
-; Изменения от Victor_Dobrov, 02-07-2009
-;   - Кнопка инсталлятора в панели задач отображает время до завершения обработки всех архивов и общий процент распаковки.
-;   - В Unicode-версиях инсталлятора правильно отображаются имена файлов.
+; Р’РµСЂСЃРёСЏ 3.0 РѕС‚ Bulat Ziganshin, 29-07-2009
+;   - С„СѓРЅРєС†РёСЏ ArchiveOrigSize РІРѕР·РІСЂР°С‰Р°РµС‚ РѕР±СЉС‘Рј РґР°РЅРЅС‹С… РІ Р°СЂС…РёРІРµ
+;   - РЅР°РёРјРµРЅРѕРІР°РЅРёСЏ РєРѕР»Р±СЌРєРѕРІ РёР·РјРµРЅРµРЅС‹ РЅР° read Рё write (Р±С‹Р»Рѕ progress Рё written)
 ;
-; Изменения от CTACKo & SotM'а. 01-07-2009
-;   - Правильно создаются папки, если в пути установки встречаются русские буквы
-;   - При компиляции определяется использование PAnsiChar/PChar. Можно использовать как обычную так и UNICODE версию с установленным препроцессором.
+; Р’РµСЂСЃРёСЏ 2.1 РѕС‚ Bulat Ziganshin, 10-07-2009
+;   - РљРЅРѕРїРєР° 'РћС‚РјРµРЅР° СѓСЃС‚Р°РЅРѕРІРєРё' С‚РµРїРµСЂСЊ РїРѕ СЂР°СЃРїРѕР»РѕР¶РµРЅРёСЋ, СЂР°Р·РјРµСЂСѓ Рё РЅР°РґРїРёСЃРё С‚РѕС‡РЅРѕ РґСѓР±Р»РёСЂСѓРµС‚ СЃС‚Р°РЅРґР°СЂС‚РЅСѓСЋ РєРЅРѕРїРєСѓ РћС‚РјРµРЅР°
+;   - Р’ unarc.dll РёСЃРїСЂР°РІР»РµРЅР° РѕС€РёР±РєР°, С‡СЂРµРІР°С‚Р°СЏ РїРѕС‚РµРЅС†РёР°Р»СЊРЅС‹РјРё РїСЂРѕР±Р»РµРјР°РјРё РїСЂРё СЂР°СЃРїР°РєРѕРІРєРµ РјРЅРѕР¶РµСЃС‚РІР° Р°СЂС…РёРІРѕРІ
 ;
-; Изменения от SotM'а. 23-06-2009
-;   - Нижний прогресс бар сместил чуть-чуть вниз, чтобы было видно имя распаковываемого файла.
-;   - Русские имена файлов теперь правильно отображаются.
-;   - При нажатии "отмены" при распаковке теперь появляется запрос на подтверждение отмены.
-;   - Переименовал некоторые переменные, чтобы их имена несли больше информации.
-;   - Немного переформатировал сам исходный код для более удобного и понятного чтения.
-;   - Исправил пару сообщений на английском языке.
+; Р’РµСЂСЃРёСЏ 2.0 РѕС‚ Bulat Ziganshin, 08-07-2009
+;   - РљРѕСЂСЂРµРєС‚РЅРѕ РѕС‚РѕР±СЂР°Р¶Р°РµС‚ РѕР±С‰РёР№ РѕР±СЉС‘Рј СѓСЃС‚Р°РЅРѕРІРєРё Рё СЃРєРѕР»СЊРєРѕ РґР°РЅРЅС‹С… СѓР¶Рµ СЂР°СЃРїР°РєРѕРІР°РЅРѕ
+;   - РРЅРґРёРєР°С‚РѕСЂ РїСЂРѕРіСЂРµСЃСЃР° С‚РµРїРµСЂСЊ РѕСЃРЅРѕРІР°РЅ РЅР° РѕР±СЉС‘РјРµ СЂР°СЃРїР°РєРѕРІР°РЅРЅС‹С… Рё Р·Р°РїРёСЃР°РЅРЅС‹С… РЅР° РґРёСЃРє РґР°РЅРЅС‹С…
+;   - Р”РѕРїРѕР»РЅРёС‚РµР»СЊРЅРѕ РѕС‚РѕР±СЂР°Р¶Р°РµС‚СЃСЏ СЃРєРѕР»СЊРєРѕ РѕСЃС‚Р°Р»РѕСЃСЊ РІСЂРµРјРµРЅРё
+;   - FreeArcCallback РІС‹Р·С‹РІР°РµС‚СЃСЏ РЅРµ РјРµРЅРµРµ 100 СЂР°Р· РІ СЃРµРєСѓРЅРґСѓ, С‡С‚Рѕ Р·Р°РјРµРЅСЏРµС‚ РІС‹Р·РѕРІ РїРѕ С‚Р°Р№РјРµСЂСѓ
+;   - Р”РѕР±Р°РІР»РµРЅ placeholder РґР»СЏ РїРµСЂРёРѕРґРёС‡РµСЃРєРё РІС‹РїРѕР»РЅСЏРµРјРѕРіРѕ РєРѕРґР° (РІ РЅР°С‡Р°Р»Рµ РїСЂРѕС†РµРґСѓСЂС‹ FreeArcCallback)
+;   - РСЃРїСЂР°РІР»РµРЅР° РїСЂРѕР±Р»РµРјР° СЃ СѓРґР°Р»РµРЅРёРµРј РїРѕСЃР»РµРґРЅРµРіРѕ СЂР°СЃРїР°РєРѕРІР°РЅРЅРѕРіРѕ С„Р°Р№Р»Р° РїСЂРё РѕС‚РјРµРЅРµ РёРЅСЃС‚Р°Р»СЏС†РёРё
+;   - РСЃРїСЂР°РІР»РµРЅР° РїСЂРѕР±Р»РµРјР° СЃ СЂСѓСЃСЃРєРёРјРё РёРјРµРЅР°РјРё/РїСѓС‚СЏРјРё СЂР°СЃРїР°РєРѕРІС‹РІР°РµРјС‹С… Р°СЂС…РёРІРѕРІ
+;   - РљРЅРѕРїРєР° 'РћС‚РјРµРЅРёС‚СЊ СЂР°СЃРїР°РєРѕРІРєСѓ' РјР°СЃС€С‚Р°Р±РёСЂСѓРµС‚СЃСЏ РІ Р·Р°РІРёСЃРёРјРѕСЃС‚Рё РѕС‚ СЂР°Р·РјРµСЂРѕРІ С„РѕСЂРјС‹
+;   - РСЃРїСЂР°РІР»РµРЅРѕ РІС‹С‡РёСЃР»РµРЅРёРµ РѕСЃС‚Р°РІС€РµРіРѕСЃСЏ РІСЂРµРјРµРЅРё (С‚РµРїРµСЂСЊ РѕС‚СЃС‡С‘С‚ РЅР°С‡РёРЅР°РµС‚СЃСЏ РІ РјРѕРјРµРЅС‚ РЅР°С‡Р°Р»Р° СЂР°СЃРїР°РєРѕРІРєРё)
+;   - Р—Р° РїСЂРµРґРµР»Р°РјРё РїСЂРѕС†РµСЃСЃР° СЂР°СЃРїР°РєРѕРІРєРё РІСЃРµ Р»РёС€РЅРёРµ РЅР°РґРїРёСЃРё СѓР±РёСЂР°СЋС‚СЃСЏ СЃ СЌРєСЂР°РЅР°
+;
+; РР·РјРµРЅРµРЅРёСЏ РѕС‚ Victor_Dobrov, 02-07-2009
+;   - РљРЅРѕРїРєР° РёРЅСЃС‚Р°Р»Р»СЏС‚РѕСЂР° РІ РїР°РЅРµР»Рё Р·Р°РґР°С‡ РѕС‚РѕР±СЂР°Р¶Р°РµС‚ РІСЂРµРјСЏ РґРѕ Р·Р°РІРµСЂС€РµРЅРёСЏ РѕР±СЂР°Р±РѕС‚РєРё РІСЃРµС… Р°СЂС…РёРІРѕРІ Рё РѕР±С‰РёР№ РїСЂРѕС†РµРЅС‚ СЂР°СЃРїР°РєРѕРІРєРё.
+;   - Р’ Unicode-РІРµСЂСЃРёСЏС… РёРЅСЃС‚Р°Р»Р»СЏС‚РѕСЂР° РїСЂР°РІРёР»СЊРЅРѕ РѕС‚РѕР±СЂР°Р¶Р°СЋС‚СЃСЏ РёРјРµРЅР° С„Р°Р№Р»РѕРІ.
+;
+; РР·РјРµРЅРµРЅРёСЏ РѕС‚ CTACKo & SotM'Р°. 01-07-2009
+;   - РџСЂР°РІРёР»СЊРЅРѕ СЃРѕР·РґР°СЋС‚СЃСЏ РїР°РїРєРё, РµСЃР»Рё РІ РїСѓС‚Рё СѓСЃС‚Р°РЅРѕРІРєРё РІСЃС‚СЂРµС‡Р°СЋС‚СЃСЏ СЂСѓСЃСЃРєРёРµ Р±СѓРєРІС‹
+;   - РџСЂРё РєРѕРјРїРёР»СЏС†РёРё РѕРїСЂРµРґРµР»СЏРµС‚СЃСЏ РёСЃРїРѕР»СЊР·РѕРІР°РЅРёРµ PAnsiChar/PChar. РњРѕР¶РЅРѕ РёСЃРїРѕР»СЊР·РѕРІР°С‚СЊ РєР°Рє РѕР±С‹С‡РЅСѓСЋ С‚Р°Рє Рё UNICODE РІРµСЂСЃРёСЋ СЃ СѓСЃС‚Р°РЅРѕРІР»РµРЅРЅС‹Рј РїСЂРµРїСЂРѕС†РµСЃСЃРѕСЂРѕРј.
+;
+; РР·РјРµРЅРµРЅРёСЏ РѕС‚ SotM'Р°. 23-06-2009
+;   - РќРёР¶РЅРёР№ РїСЂРѕРіСЂРµСЃСЃ Р±Р°СЂ СЃРјРµСЃС‚РёР» С‡СѓС‚СЊ-С‡СѓС‚СЊ РІРЅРёР·, С‡С‚РѕР±С‹ Р±С‹Р»Рѕ РІРёРґРЅРѕ РёРјСЏ СЂР°СЃРїР°РєРѕРІС‹РІР°РµРјРѕРіРѕ С„Р°Р№Р»Р°.
+;   - Р СѓСЃСЃРєРёРµ РёРјРµРЅР° С„Р°Р№Р»РѕРІ С‚РµРїРµСЂСЊ РїСЂР°РІРёР»СЊРЅРѕ РѕС‚РѕР±СЂР°Р¶Р°СЋС‚СЃСЏ.
+;   - РџСЂРё РЅР°Р¶Р°С‚РёРё "РѕС‚РјРµРЅС‹" РїСЂРё СЂР°СЃРїР°РєРѕРІРєРµ С‚РµРїРµСЂСЊ РїРѕСЏРІР»СЏРµС‚СЃСЏ Р·Р°РїСЂРѕСЃ РЅР° РїРѕРґС‚РІРµСЂР¶РґРµРЅРёРµ РѕС‚РјРµРЅС‹.
+;   - РџРµСЂРµРёРјРµРЅРѕРІР°Р» РЅРµРєРѕС‚РѕСЂС‹Рµ РїРµСЂРµРјРµРЅРЅС‹Рµ, С‡С‚РѕР±С‹ РёС… РёРјРµРЅР° РЅРµСЃР»Рё Р±РѕР»СЊС€Рµ РёРЅС„РѕСЂРјР°С†РёРё.
+;   - РќРµРјРЅРѕРіРѕ РїРµСЂРµС„РѕСЂРјР°С‚РёСЂРѕРІР°Р» СЃР°Рј РёСЃС…РѕРґРЅС‹Р№ РєРѕРґ РґР»СЏ Р±РѕР»РµРµ СѓРґРѕР±РЅРѕРіРѕ Рё РїРѕРЅСЏС‚РЅРѕРіРѕ С‡С‚РµРЅРёСЏ.
+;   - РСЃРїСЂР°РІРёР» РїР°СЂСѓ СЃРѕРѕР±С‰РµРЅРёР№ РЅР° Р°РЅРіР»РёР№СЃРєРѕРј СЏР·С‹РєРµ.
 
-; Изменения от Victor_Dobrov, 15-06-2009
-;   - Оптимизация и локализация скрипта, более подробная строка статуса, общий прогресс-бар, при неудачной распаковке выполняется откат (деинсталляция) и показывается текст ошибки.
+; РР·РјРµРЅРµРЅРёСЏ РѕС‚ Victor_Dobrov, 15-06-2009
+;   - РћРїС‚РёРјРёР·Р°С†РёСЏ Рё Р»РѕРєР°Р»РёР·Р°С†РёСЏ СЃРєСЂРёРїС‚Р°, Р±РѕР»РµРµ РїРѕРґСЂРѕР±РЅР°СЏ СЃС‚СЂРѕРєР° СЃС‚Р°С‚СѓСЃР°, РѕР±С‰РёР№ РїСЂРѕРіСЂРµСЃСЃ-Р±Р°СЂ, РїСЂРё РЅРµСѓРґР°С‡РЅРѕР№ СЂР°СЃРїР°РєРѕРІРєРµ РІС‹РїРѕР»РЅСЏРµС‚СЃСЏ РѕС‚РєР°С‚ (РґРµРёРЅСЃС‚Р°Р»Р»СЏС†РёСЏ) Рё РїРѕРєР°Р·С‹РІР°РµС‚СЃСЏ С‚РµРєСЃС‚ РѕС€РёР±РєРё.
 
 ; Bulat Ziganshin, 13-06-2009
-;   - Создание библиотеки unarc.dll и скрипта распаковки freearc_example.iss.
+;   - РЎРѕР·РґР°РЅРёРµ Р±РёР±Р»РёРѕС‚РµРєРё unarc.dll Рё СЃРєСЂРёРїС‚Р° СЂР°СЃРїР°РєРѕРІРєРё freearc_example.iss.
 
 [Setup]
 AppName=FreeArc Example
-AppVerName=FreeArc Example 3.3
+AppVerName=FreeArc Example 3.6
 DefaultDirName={pf}\FreeArc Example
 UsePreviousAppDir=false
 DirExistsWarning=no
@@ -79,17 +92,22 @@ VersionInfoCopyright=Bulat Ziganshin, Victor Dobrov, SotM, CTACKo
 [Languages]
 Name: eng; MessagesFile: compiler:Default.isl
 Name: rus; MessagesFile: compiler:Languages\Russian.isl
+Name: pl;  MessagesFile: compiler:Languages\Polish.isl
+Name: ger; MessagesFile: compiler:Languages\German.isl
 
 [CustomMessages]
 eng.ArcBreak=Installation cancelled!
-eng.ExtractedInfo=Extracted %1 Mb of %2 Mb
-eng.ArcInfo=Archive: %1 of %2
-eng.ArcTitle=Extracting FreeArc archive
 eng.ArcError=Decompression failed with error code %1
-eng.ArcFail=Decompression failed!
-eng.AllProgress=Overall extraction progress: %1%%
 eng.ArcBroken=Archive %1 is damaged%nor not enough free space.
+eng.ArcFail=Decompression failed!
+eng.ArcTitle=Extracting FreeArc archive...
+eng.ArcInfo=Archive: %1 of %2
+eng.ArcInfoExt=Archive: %1 РёР· %2, size %3 of %5, %4%% processed
+eng.ArcFinish=Unpacked archives: %1, received files: %2 [%3]
+eng.StatusInfo=Files: %1%2, progress %3%%, remaining time %4
+eng.AllProgress=Overall extraction progress: %1%%
 eng.Extracting=Extracting: %1
+eng.ExtractedInfo=Extracted %1 Mb of %2 Mb
 eng.taskbar=%1%%, %2 remains
 eng.remains=Remaining time: %1
 eng.LongTime=at no time
@@ -98,22 +116,55 @@ eng.hour= hours
 eng.min= mins
 eng.sec= secs
 
-rus.ArcBreak=Установка прервана!
-rus.ExtractedInfo=Распаковано %1 Мб из %2 Мб
-rus.ArcInfo=Архив: %1 из %2
-rus.ArcTitle=Распаковка архивов FreeArc
-rus.ArcError=Распаковщик FreeArc вернул код ошибки: %1
-rus.ArcFail=Распаковка не завершена!
-rus.AllProgress=Общий прогресс распаковки: %1%%
-rus.ArcBroken=Возможно, архив %1 повреждён%nили недостаточно места на диске назначения.
-rus.Extracting=Распаковывается: %1
-rus.taskbar=%1%%, жди %2
-rus.remains=Осталось ждать %1
-rus.LongTime=вечно
-rus.ending=завершение
-rus.hour= часов
-rus.min= мин
-rus.sec= сек
+rus.ArcBreak=РЈСЃС‚Р°РЅРѕРІРєР° РїСЂРµСЂРІР°РЅР°!
+rus.ArcError=Р Р°СЃРїР°РєРѕРІС‰РёРє FreeArc РІРµСЂРЅСѓР» РєРѕРґ РѕС€РёР±РєРё: %1
+rus.ArcBroken=Р’РѕР·РјРѕР¶РЅРѕ, Р°СЂС…РёРІ %1 РїРѕРІСЂРµР¶РґС‘РЅ%nРёР»Рё РЅРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РјРµСЃС‚Р° РЅР° РґРёСЃРєРµ РЅР°Р·РЅР°С‡РµРЅРёСЏ.
+rus.ArcFail=Р Р°СЃРїР°РєРѕРІРєР° РЅРµ Р·Р°РІРµСЂС€РµРЅР°!
+rus.ArcTitle=Р Р°СЃРїР°РєРѕРІРєР° Р°СЂС…РёРІРѕРІ FreeArc...
+rus.ArcInfo=РђСЂС…РёРІ: %1 РёР· %2
+rus.ArcInfoExt=РђСЂС…РёРІ %1 РёР· %2, РѕР±СЉС‘Рј %3 РёР· %5, %4%% РѕР±СЂР°Р±РѕС‚Р°РЅРѕ
+rus.ArcFinish=Р Р°СЃРїР°РєРѕРІР°РЅРѕ Р°СЂС…РёРІРѕРІ: %1, РїРѕР»СѓС‡РµРЅРѕ С„Р°Р№Р»РѕРІ: %2 [%3]
+rus.StatusInfo=С„Р°Р№Р»РѕРІ: %1%2, %3%% РІС‹РїРѕР»РЅРµРЅРѕ, РѕСЃС‚Р°Р»РѕСЃСЊ Р¶РґР°С‚СЊ %4
+rus.AllProgress=РћР±С‰РёР№ РїСЂРѕРіСЂРµСЃСЃ СЂР°СЃРїР°РєРѕРІРєРё: %1%%
+rus.Extracting=Р Р°СЃРїР°РєРѕРІС‹РІР°РµС‚СЃСЏ: %1
+rus.ExtractedInfo=Р Р°СЃРїР°РєРѕРІР°РЅРѕ %1 РњР± РёР· %2 РњР±
+rus.taskbar=%1%%, Р¶РґРё %2
+rus.remains=РћСЃС‚Р°Р»РѕСЃСЊ Р¶РґР°С‚СЊ %1
+rus.LongTime=РІРµС‡РЅРѕ
+rus.ending=Р·Р°РІРµСЂС€РµРЅРёРµ
+rus.hour= С‡Р°СЃРѕРІ
+rus.min= РјРёРЅ
+rus.sec= СЃРµРє
+
+pl.ArcBreak=Instalacja anulowana!
+pl.ArcError=Wypakowywanie zakoЕ„czone bЕ‚Д™dem %1
+pl.ArcBroken=Archiwum <%1> jest uszkodzone lub za maЕ‚o wolnego miejsca.
+pl.ArcFail=Wypakowywanie przerwane!
+pl.ArcTitle=Wypakowywanie archiwГіw FreeArc...
+pl.ArcInfo=Archiwum: %1 z %2
+pl.ArcInfoExt=Archiwum: %1 z %2, rozmair %3 z %5, %4%% zakoЕ„czone
+pl.ArcFinish=Wypakowane archiwa: %1, uzyskane pliki: %2 [%3]
+pl.StatusInfo=Pliki: %1%2, postД™p %3%%, pozostaЕ‚y czas %4
+pl.taskbar=%1%%, %2 pozostaЕ‚o
+pl.ending=koЕ„czenie
+pl.hour= godziny
+pl.min= minuty
+pl.sec= sekundy
+
+ger.ArcBreak=Installation abgebrochen!
+ger.ArcError=Dekompression fehlgeschlagen mit Fehlercode %1
+ger.ArcBroken=Archiv <%1> ist beschГ¤digt oder es steht nicht genГјgend Speicherplatz zur VerfГјgung.
+ger.ArcFail=Dekompression fehlgeschlagen!
+ger.ArcTitle=Entpacke FreeArc-Archiv...
+ger.ArcInfo=Archiv: %1 ГЁГ§ %2
+ger.ArcInfoExt=Archiv: %1 ГЁГ§ %2, GrГ¶Гџe %3 of %5, %4%% entpackt
+ger.ArcFinish=Entpackte Archive: %1, Entpackte Dateien: %2 [%3]
+ger.StatusInfo=Dateien: %1%2, Fortschritt %3%%, Verbleibende Zeit %4
+ger.taskbar=%1%%, %2 verbleibend
+ger.ending=fertigstellen
+ger.hour= Stunden
+ger.min= Minuten
+ger.sec= Sekunden
 
 [Files]
 ;Source: *.arc; DestDir: {app}; Flags: nocompression
@@ -125,21 +176,21 @@ Type: filesandordirs; Name: {app}
 
 [Code]
 const
-    Archives = '{src}\*.arc';    // укажите расположение архивов FreeArc; для внешних файлов строку в [Files] добавлять необязательно
+    Archives = '{src}\*.arc';    // СѓРєР°Р¶РёС‚Рµ СЂР°СЃРїРѕР»РѕР¶РµРЅРёРµ Р°СЂС…РёРІРѕРІ FreeArc; РґР»СЏ РІРЅРµС€РЅРёС… С„Р°Р№Р»РѕРІ СЃС‚СЂРѕРєСѓ РІ [Files] РґРѕР±Р°РІР»СЏС‚СЊ РЅРµРѕР±СЏР·Р°С‚РµР»СЊРЅРѕ
 
     PM_REMOVE = 1;
     CP_ACP = 0; CP_UTF8 = 65001;
     oneMb = 1048576;
 
 type
-#ifdef UNICODE  ; если у вас ошибка на этой строке, то установите препроцессор или исправьте скрипт для вашей версии Inno Setup
+#ifdef UNICODE  ; РµСЃР»Рё Сѓ РІР°СЃ РѕС€РёР±РєР° РЅР° СЌС‚РѕР№ СЃС‚СЂРѕРєРµ, С‚Рѕ СѓСЃС‚Р°РЅРѕРІРёС‚Рµ РїСЂРµРїСЂРѕС†РµСЃСЃРѕСЂ РёР»Рё РёСЃРїСЂР°РІСЊС‚Рµ СЃРєСЂРёРїС‚ РґР»СЏ РІР°С€РµР№ РІРµСЂСЃРёРё Inno Setup
     #define A "W"
 #else
-    #define A "A"  ; точка входа в SetWindowText, {#A} меняется на A или W в зависимости от версии
-    PAnsiChar = PChar;  // Required for Inno Setup 5.3.0 and higher. (требуется для Inno Setup версии 5.3.0 и ниже)
+    #define A "A"  ; С‚РѕС‡РєР° РІС…РѕРґР° РІ SetWindowText, {#A} РјРµРЅСЏРµС‚СЃСЏ РЅР° A РёР»Рё W РІ Р·Р°РІРёСЃРёРјРѕСЃС‚Рё РѕС‚ РІРµСЂСЃРёРё
+    PAnsiChar = PChar;  // Required for Inno Setup 5.3.0 and higher. (С‚СЂРµР±СѓРµС‚СЃСЏ РґР»СЏ Inno Setup РІРµСЂСЃРёРё 5.3.0 Рё РЅРёР¶Рµ)
 #endif
 #if Ver < 84018176
-    AnsiString = String; // There is no need for this line in Inno Setup 5.2.4 and above (для Inno Setup версий 5.2.4 и выше эта строка не нужна)
+    AnsiString = String; // There is no need for this line in Inno Setup 5.2.4 and above (РґР»СЏ Inno Setup РІРµСЂСЃРёР№ 5.2.4 Рё РІС‹С€Рµ СЌС‚Р° СЃС‚СЂРѕРєР° РЅРµ РЅСѓР¶РЅР°)
 #endif
 
     TMyMsg = record
@@ -191,7 +242,7 @@ begin
     end;
 end;
 
-// Перевод числа в строку с точностью 3 знака (%.3n) с округлением дробной части, если она есть
+// РџРµСЂРµРІРѕРґ С‡РёСЃР»Р° РІ СЃС‚СЂРѕРєСѓ СЃ С‚РѕС‡РЅРѕСЃС‚СЊСЋ 3 Р·РЅР°РєР° (%.3n) СЃ РѕРєСЂСѓРіР»РµРЅРёРµРј РґСЂРѕР±РЅРѕР№ С‡Р°СЃС‚Рё, РµСЃР»Рё РѕРЅР° РµСЃС‚СЊ
 Function NumToStr(Float: Extended): String;
 Begin
     Result:= Format('%.3n', [Float]); StringChange(Result, ',', '.');
@@ -210,7 +261,7 @@ Begin
 End;
 
 // Converts OEM encoded string into ANSI
-// Преобразует OEM строку в ANSI кодировку
+// РџСЂРµРѕР±СЂР°Р·СѓРµС‚ OEM СЃС‚СЂРѕРєСѓ РІ ANSI РєРѕРґРёСЂРѕРІРєСѓ
 function OemToAnsiStr( strSource: AnsiString): AnsiString;
 var
     nRet : longint;
@@ -220,7 +271,7 @@ begin
 end;
 
 // Converts ANSI encoded string into UTF-8
-// Преобразует строку из ANSI в UTF-8 кодировку
+// РџСЂРµРѕР±СЂР°Р·СѓРµС‚ СЃС‚СЂРѕРєСѓ РёР· ANSI РІ UTF-8 РєРѕРґРёСЂРѕРІРєСѓ
 function AnsiToUtf8( strSource: string ): string;
 var
     nRet : integer;
@@ -305,7 +356,7 @@ Begin
 End;
 
 // Converts milliseconds to human-readable time
-// Конвертирует милисекунды в человеко-читаемое изображение времени
+// РљРѕРЅРІРµСЂС‚РёСЂСѓРµС‚ РјРёР»РёСЃРµРєСѓРЅРґС‹ РІ С‡РµР»РѕРІРµРєРѕ-С‡РёС‚Р°РµРјРѕРµ РёР·РѕР±СЂР°Р¶РµРЅРёРµ РІСЂРµРјРµРЅРё
 Function TicksToTime(Ticks: DWord; h,m,s: String; detail: Boolean): String;
 Begin
     if detail                               {hh:mm:ss format} then
@@ -324,7 +375,7 @@ var
     s: String;
 begin
     if GetTickCount - LastTimerEvent > 1000 then begin
-        // This code will be executed once each 1000 ms (этот код будет выполняться раз в 1000 миллисекунд)
+        // This code will be executed once each 1000 ms (СЌС‚РѕС‚ РєРѕРґ Р±СѓРґРµС‚ РІС‹РїРѕР»РЅСЏС‚СЊСЃСЏ СЂР°Р· РІ 1000 РјРёР»Р»РёСЃРµРєСѓРЅРґ)
         //  ....
         // End of code executed by timer
         LastTimerEvent := LastTimerEvent+1000;
@@ -345,7 +396,7 @@ begin
         percents:= (Mb*1000) div totalUncompressedSize;
         s := FmtMessage(cm('ExtractedInfo'), [IntToStr(Mb), IntToStr(totalUncompressedSize)]);
         if GetArrayLength(Arcs)>1 then
-            s := s + '. '+FmtMessage(cm('ArcInfo'), [IntToStr(n+1), IntToStr(GetArrayLength(Arcs))])
+            s := s + '. '+FmtMessage(cm('ArcInfo'), [IntToStr(n+1), IntToStr(GetArrayLength(Arcs))]);
         ExtractFile.Caption := s
 
         // Calculate and show current percents
@@ -385,7 +436,7 @@ begin
     WizardForm.ProgressGauge.Max:= totalUncompressedSize;
     // Other initializations
     callback:= WrapFreeArcCallback(@FreeArcCallback,4);   //FreeArcCallback has 4 arguments
-    StartInstall:= GetTickCount;    {время начала распаковки}
+    StartInstall:= GetTickCount;    {РІСЂРµРјСЏ РЅР°С‡Р°Р»Р° СЂР°СЃРїР°РєРѕРІРєРё}
     LastTimerEvent:= GetTickCount;
     baseMb:= 0
 
@@ -409,14 +460,14 @@ begin
             msgError:= FmtMessage(cm('ArcError'), [IntToStr(Result)]);
             GetSpaceOnDisk(ExtractFileDrive(ExpandConstant('{app}')), True, FreeMB, TotalMB);
             case Result of
-                -1: if FreeMB < 32 {Мб на диске} then msgError:= SetupMessage(msgDiskSpaceWarningTitle)
+                -1: if FreeMB < 32 {РњР± РЅР° РґРёСЃРєРµ} then msgError:= SetupMessage(msgDiskSpaceWarningTitle)
                     else msgError:= msgError + #13#10 + FmtMessage(cm('ArcBroken'), [ExtractFileName(Arcs[n].Path)]);
                 -127:   msgError:= cm('ArcBreak');    //Cancel button
                 -63:    msgError:= cm('ArcFail');
             end;
-//          MsgBox(msgError, mbInformation, MB_OK);    //сообщение показывается на странице завершения
+//          MsgBox(msgError, mbInformation, MB_OK);    //СЃРѕРѕР±С‰РµРЅРёРµ РїРѕРєР°Р·С‹РІР°РµС‚СЃСЏ РЅР° СЃС‚СЂР°РЅРёС†Рµ Р·Р°РІРµСЂС€РµРЅРёСЏ
             Log(msgError);
-            Break;    //прервать цикл распаковки
+            Break;    //РїСЂРµСЂРІР°С‚СЊ С†РёРєР» СЂР°СЃРїР°РєРѕРІРєРё
         end;
     end;
     // Hide labels and button
@@ -436,23 +487,23 @@ begin
         else
         begin
             // Error occured, uninstall it then
-            Exec(ExpandConstant('{uninstallexe}'), '/SILENT','', sw_Hide, ewWaitUntilTerminated, n);    //откат установки из-за ошибки unarc.dll
+            Exec(ExpandConstant('{uninstallexe}'), '/SILENT','', sw_Hide, ewWaitUntilTerminated, n);    //РѕС‚РєР°С‚ СѓСЃС‚Р°РЅРѕРІРєРё РёР·-Р·Р° РѕС€РёР±РєРё unarc.dll
             SetTaskBarTitle(SetupMessage(msgErrorTitle))
             WizardForm.Caption:= SetupMessage(msgErrorTitle) +' - '+ cm('ArcBreak')
         end;
     end;
 end;
 
-//    стандартный способ отката (не нужна CurPageChanged), но архивы распаковываются до извлечения файлов инсталлятора
+//    СЃС‚Р°РЅРґР°СЂС‚РЅС‹Р№ СЃРїРѕСЃРѕР± РѕС‚РєР°С‚Р° (РЅРµ РЅСѓР¶РЅР° CurPageChanged), РЅРѕ Р°СЂС…РёРІС‹ СЂР°СЃРїР°РєРѕРІС‹РІР°СЋС‚СЃСЏ РґРѕ РёР·РІР»РµС‡РµРЅРёСЏ С„Р°Р№Р»РѕРІ РёРЅСЃС‚Р°Р»Р»СЏС‚РѕСЂР°
 //    if CurStep = ssInstall then
 //      if UnPack(Archives) <> 0 then Abort;
 
 Procedure CurPageChanged(CurPageID: Integer);
 Begin
     if (CurPageID = wpFinished) and (UnPackError <> 0) then
-    begin // Extraction was unsuccessful (распаковщик вернул ошибку)
+    begin // Extraction was unsuccessful (СЂР°СЃРїР°РєРѕРІС‰РёРє РІРµСЂРЅСѓР» РѕС€РёР±РєСѓ)
         // Show error message
-        WizardForm.FinishedLabel.Font.Color:= $0000C0;    // red (красный)
+        WizardForm.FinishedLabel.Font.Color:= $0000C0;    // red (РєСЂР°СЃРЅС‹Р№)
         WizardForm.FinishedLabel.Height:= WizardForm.FinishedLabel.Height * 2;
         WizardForm.FinishedLabel.Caption:= SetupMessage(msgSetupAborted) + #13#10#13#10 + msgError;
     end;
@@ -488,3 +539,4 @@ begin
     btnCancelUnpacking.OnClick:= @btnCancelUnpackingOnClick;
     btnCancelUnpacking.Hide;
 end;
+

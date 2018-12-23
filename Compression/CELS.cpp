@@ -5,7 +5,7 @@ namespace CELS
 {
 
 // ***********************************************************************************************************************
-// Реализация класса COMPRESSION_METHOD                                                                                  *
+// Р РµР°Р»РёР·Р°С†РёСЏ РєР»Р°СЃСЃР° COMPRESSION_METHOD                                                                                  *
 // ***********************************************************************************************************************
 
 int COMPRESSION_METHOD::server()
@@ -19,11 +19,11 @@ int COMPRESSION_METHOD::server()
   if (strequ (service, "decompress"))             {parse_method(); return decompress (p._callback("callback"), p);}
 #ifndef FREEARC_DECOMPRESS_ONLY
   if (strequ (service, "compress"))               {parse_method(); return compress   (p._callback("callback"), p);}
-  if (strequ (service, "canonize"))               {parse_method();                                     char a[1000]; ShowCompressionMethod(a); return p._return(a);}
-  if (strequ (service, "SetCompressionMem"))      {parse_method(); SetCompressionMem  (p._int("mem")); char a[1000]; ShowCompressionMethod(a); return p._return(a);}
-  if (strequ (service, "SetDictionary"))          {parse_method(); SetDictionary      (p._int("mem")); char a[1000]; ShowCompressionMethod(a); return p._return(a);}
-  if (strequ (service, "SetBlockSize"))           {parse_method(); SetBlockSize       (p._int("mem")); char a[1000]; ShowCompressionMethod(a); return p._return(a);}
-  if (strequ (service, "SetDecompressionMem"))    {parse_method(); SetDecompressionMem(p._int("mem")); char a[1000]; ShowCompressionMethod(a); return p._return(a);}
+  if (strequ (service, "canonize"))               {parse_method();                                     char a[1000]; ShowCompressionMethod(a,FALSE); return p._return(a);}
+  if (strequ (service, "SetCompressionMem"))      {parse_method(); SetCompressionMem  (p._int("mem")); char a[1000]; ShowCompressionMethod(a,FALSE); return p._return(a);}
+  if (strequ (service, "SetDictionary"))          {parse_method(); SetDictionary      (p._int("mem")); char a[1000]; ShowCompressionMethod(a,FALSE); return p._return(a);}
+  if (strequ (service, "SetBlockSize"))           {parse_method(); SetBlockSize       (p._int("mem")); char a[1000]; ShowCompressionMethod(a,FALSE); return p._return(a);}
+  if (strequ (service, "SetDecompressionMem"))    {parse_method(); SetDecompressionMem(p._int("mem")); char a[1000]; ShowCompressionMethod(a,FALSE); return p._return(a);}
   if (strequ (service, "GetCompressionMem"))      {parse_method(); return p._return (GetCompressionMem());}
   if (strequ (service, "GetDictionary"))          {parse_method(); return p._return (GetDictionary());}
   if (strequ (service, "GetBlockSize"))           {parse_method(); return p._return (GetBlockSize());}
@@ -35,10 +35,10 @@ int COMPRESSION_METHOD::server()
 
 
 // ****************************************************************************************************************************
-// МЕТОД "СЖАТИЯ" STORING *****************************************************************************************************
+// РњР•РўРћР” "РЎР–РђРўРРЇ" STORING *****************************************************************************************************
 // ****************************************************************************************************************************
 
-// Функция "(рас)паковки", копирующая данные один в один
+// Р¤СѓРЅРєС†РёСЏ "(СЂР°СЃ)РїР°РєРѕРІРєРё", РєРѕРїРёСЂСѓСЋС‰Р°СЏ РґР°РЅРЅС‹Рµ РѕРґРёРЅ РІ РѕРґРёРЅ
 int copy_data (CALLBACK_FUNC *callback, void *auxdata)
 {
   char buf[BUFFER_SIZE]; int len, errcode;
@@ -51,27 +51,27 @@ finished:
   return errcode;
 }
 
-// Реализация метода "сжатия" STORING
+// Р РµР°Р»РёР·Р°С†РёСЏ РјРµС‚РѕРґР° "СЃР¶Р°С‚РёСЏ" STORING
 struct STORING_METHOD : COMPRESSION_METHOD
 {
-  // Конструктор, присваивающий параметрам метода значения по умолчанию
+  // РљРѕРЅСЃС‚СЂСѓРєС‚РѕСЂ, РїСЂРёСЃРІР°РёРІР°СЋС‰РёР№ РїР°СЂР°РјРµС‚СЂР°Рј РјРµС‚РѕРґР° Р·РЅР°С‡РµРЅРёСЏ РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ
   STORING_METHOD (TABI_ELEMENT* params) : COMPRESSION_METHOD(params) {}
-  // Функции распаковки и упаковки
+  // Р¤СѓРЅРєС†РёРё СЂР°СЃРїР°РєРѕРІРєРё Рё СѓРїР°РєРѕРІРєРё
   virtual int decompress (CALLBACK_FUNC *callback, void *auxdata)    {return copy_data (callback, auxdata);}
 #ifndef FREEARC_DECOMPRESS_ONLY
   virtual int compress   (CALLBACK_FUNC *callback, void *auxdata)    {return copy_data (callback, auxdata);}
 
-  // Разбирает строку с параметрами метода
+  // Р Р°Р·Р±РёСЂР°РµС‚ СЃС‚СЂРѕРєСѓ СЃ РїР°СЂР°РјРµС‚СЂР°РјРё РјРµС‚РѕРґР°
   virtual void parse_method()
   {
     if (!strequ (p._str("method"), "storing"))
       throw "STORING_METHOD:parse_method";
   }
 
-  // Записать в buf[MAX_METHOD_STRLEN] строку, описывающую метод сжатия (функция, обратная к parse_method)
-  virtual void ShowCompressionMethod (char *buf)   {sprintf (buf, "storing");}
+  // Р—Р°РїРёСЃР°С‚СЊ РІ buf[MAX_METHOD_STRLEN] СЃС‚СЂРѕРєСѓ, РѕРїРёСЃС‹РІР°СЋС‰СѓСЋ РјРµС‚РѕРґ СЃР¶Р°С‚РёСЏ (С„СѓРЅРєС†РёСЏ, РѕР±СЂР°С‚РЅР°СЏ Рє parse_method)
+  virtual void ShowCompressionMethod (char *buf, bool purify)   {sprintf (buf, "storing");}
 
-  // Получить/установить объём памяти, используемой при упаковке/распаковке, размер словаря или размер блока
+  // РџРѕР»СѓС‡РёС‚СЊ/СѓСЃС‚Р°РЅРѕРІРёС‚СЊ РѕР±СЉС‘Рј РїР°РјСЏС‚Рё, РёСЃРїРѕР»СЊР·СѓРµРјРѕР№ РїСЂРё СѓРїР°РєРѕРІРєРµ/СЂР°СЃРїР°РєРѕРІРєРµ, СЂР°Р·РјРµСЂ СЃР»РѕРІР°СЂСЏ РёР»Рё СЂР°Р·РјРµСЂ Р±Р»РѕРєР°
   virtual MemSize GetCompressionMem   (void)    {return BUFFER_SIZE;}
   virtual MemSize GetDictionary       (void)    {return 0;}
   virtual MemSize GetBlockSize        (void)    {return 0;}
@@ -96,17 +96,17 @@ int storing_register = CELS_Register(storing_server);
 
 
 // ****************************************************************************************************************************
-// ПОДДЕРЖКА ТАБЛИЦЫ ЗАРЕГИСТРИРОВАННЫХ МЕТОДОВ СЖАТИЯ И ПОИСК В ЭТОЙ ТАБЛИЦЕ РЕАЛИЗАЦИИ ЧИСТО КОНКРЕТНОГО МЕТОДА *************
+// РџРћР”Р”Р•Р Р–РљРђ РўРђР‘Р›РР¦Р« Р—РђР Р•Р“РРЎРўР РР РћР’РђРќРќР«РҐ РњР•РўРћР”РћР’ РЎР–РђРўРРЇ Р РџРћРРЎРљ Р’ Р­РўРћР™ РўРђР‘Р›РР¦Р• Р Р•РђР›РР—РђР¦РР Р§РРЎРўРћ РљРћРќРљР Р•РўРќРћР“Рћ РњР•РўРћР”Рђ *************
 // ****************************************************************************************************************************
 
-// Кол-во зарегистрированных методов сжатия и таблица, куда они заносятся
+// РљРѕР»-РІРѕ Р·Р°СЂРµРіРёСЃС‚СЂРёСЂРѕРІР°РЅРЅС‹С… РјРµС‚РѕРґРѕРІ СЃР¶Р°С‚РёСЏ Рё С‚Р°Р±Р»РёС†Р°, РєСѓРґР° РѕРЅРё Р·Р°РЅРѕСЃСЏС‚СЃСЏ
 int methodsCount = 0;
 TABI_FUNCTION* methodsTable[MAX_COMPRESSION_METHODS];
 
 // Compression method registration
 int CELS_Register (TABI_FUNCTION *method)
 {
-  CHECK (methodsCount < elements(methodsTable), (s,"INTERNAL ERROR: Overflow of compression methods table"));
+  CHECK (FREEARC_ERRCODE_INTERNAL,  methodsCount < elements(methodsTable),  (s,"INTERNAL ERROR: Overflow of compression methods table"));
   int result = (*method)(TABI_DYNAMAP("service","register"));
   if (result==FREEARC_OK)
     methodsTable[methodsCount++] = method;
@@ -129,7 +129,7 @@ int CELS_Call (TABI_ELEMENT* params)
   if (start_with (service, "Limit") && isupper(service[5]))                 return p._return(p._str("method"));   // to do: get & set
 /*
   {
-    char new_service[MAX_METHOD_STRLEN];
+    char new_service[MAX_COMPRESSOR_STRLEN];
     sprintf(new_service, "Get%s", service+5);
     MemSize mem = TABI_callret(CELS_Call, TABI_DYNAMAP(p) ("service", new_service));
     if (mem <= p._longlong("mem"))         // if method already uses less memory than specified limit
@@ -164,7 +164,7 @@ int CELS_Call (TABI_ELEMENT* params)
 extern "C" {
 void tabi_dump(TABI_ELEMENT *params, int n=0)
 {
-	TABI_MAP(params).dump(n);
+	TABI_MAP(params).dump("tabi_dump",n);
 }
 }
 

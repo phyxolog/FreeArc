@@ -5,108 +5,170 @@ extern "C" {
 }
 
 /*-------------------------------------------------*/
-/* Реализация класса TORNADO_METHOD                */
+/* Р РµР°Р»РёР·Р°С†РёСЏ РєР»Р°СЃСЃР° TORNADO_METHOD                */
 /*-------------------------------------------------*/
 
-// Конструктор, присваивающий параметрам метода сжатия значения по умолчанию
+// РљРѕРЅСЃС‚СЂСѓРєС‚РѕСЂ, РїСЂРёСЃРІР°РёРІР°СЋС‰РёР№ РїР°СЂР°РјРµС‚СЂР°Рј РјРµС‚РѕРґР° СЃР¶Р°С‚РёСЏ Р·РЅР°С‡РµРЅРёСЏ РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ
 TORNADO_METHOD::TORNADO_METHOD()
 {
   m = std_Tornado_method [default_Tornado_method];
 }
 
-// Функция распаковки
+// РЈРїР°РєРѕРІРєР°/СЂР°СЃРїР°РєРѕРІРєР° РІ РїР°РјСЏС‚Рё
+int TORNADO_METHOD::DeCompressMem (COMPRESSION direction, void *input, int inputSize, void *output, int *outputSize, CALLBACK_FUNC *callback, void *auxdata, void **CodecState)
+{
+  MemBuf membuf(input, inputSize, output, *outputSize, callback, auxdata);
+  int result  =  (direction==COMPRESS?
+#ifndef FREEARC_DECOMPRESS_ONLY
+                                       tor_compress (m, ReadWriteMem, &membuf, NULL, -1)   // "input, inputSize" can't be used yet because it needs to restore diffed tables for the case of storing original data
+#else
+                                       FREEARC_ERRCODE_ONLY_DECOMPRESS
+#endif
+                                     : tor_decompress (ReadWriteMem, &membuf, NULL, -1));
+  *outputSize = membuf.written();
+  return result;
+}
+
+// Р¤СѓРЅРєС†РёСЏ СЂР°СЃРїР°РєРѕРІРєРё
 int TORNADO_METHOD::decompress (CALLBACK_FUNC *callback, void *auxdata)
 {
-  return tor_decompress (callback, auxdata);
+  return tor_decompress (callback, auxdata, NULL, -1);
 }
 
 #ifndef FREEARC_DECOMPRESS_ONLY
 
-// Функция упаковки
+// Р¤СѓРЅРєС†РёСЏ СѓРїР°РєРѕРІРєРё
 int TORNADO_METHOD::compress (CALLBACK_FUNC *callback, void *auxdata)
 {
-  return tor_compress (m, callback, auxdata);
+  return tor_compress (m, callback, auxdata, NULL, -1);
 }
 
-// Установить размер словаря и откорректировать размер хеша
+
+// РџРѕСЃС‡РёС‚Р°С‚СЊ, СЃРєРѕР»СЊРєРѕ РїР°РјСЏС‚Рё С‚СЂРµР±СѓРµС‚СЃСЏ РґР»СЏ СѓРїР°РєРѕРІРєРё Р·Р°РґР°РЅРЅС‹Рј РјРµС‚РѕРґРѕРј
+MemSize TORNADO_METHOD::GetCompressionMem()
+{                                                                                                                     // chunk*2
+  return m.buffer + m.hashsize + m.auxhash_size + tornado_compressor_outbuf_size(m.buffer) + (compress_all_at_once? 0:LARGE_BUFFER_SIZE*2) + (m.hash3?1*mb:0)
+         + (m.match_parser==OPTIMAL? OPTIMAL_WINDOW*(REPDIST_CODES+3)*sizeof(DISTANCE) : 0)
+         + (m.match_finder>=BT_MF4? m.buffer*MemSize(2)*sizeof(UINT) : 0);
+}
+
+// Modifies compression method to use specified amount of memory
+void TORNADO_METHOD::SetCompressionMem (MemSize mem)
+{
+  if (mem>0) {
+    int koeff = compress_all_at_once? 5:3;
+    m.hashsize = round_to_nearest_hashsize (1<<lb(mem/koeff), m.hash_row_width);   // РћС‚РІРµРґС‘Рј С…РµС€Сѓ РїСЂРёРјРµСЂРЅРѕ 1/3-1/5 РѕР±СЉС‘РјР° РїР°РјСЏС‚Рё, С‚РѕРіРґР° hashsize ~= buffer/2
+    mem       -= m.hashsize;
+    m.buffer   = tornado_compressor_calc_dict (mem>128*kb? mem-64*kb:64*kb);       // Calculate dictionary size depending on memory left and compress_all_at_once
+  }
+}
+
+// РЈСЃС‚Р°РЅРѕРІРёС‚СЊ СЂР°Р·РјРµСЂ СЃР»РѕРІР°СЂСЏ Рё РѕС‚РєРѕСЂСЂРµРєС‚РёСЂРѕРІР°С‚СЊ СЂР°Р·РјРµСЂ С…РµС€Р°
 void TORNADO_METHOD::SetDictionary (MemSize dict)
 {
   if (dict>0) {
     if (dict < m.buffer)
-      // При уменьшении словаря: уменьшить размер хэша, если он слишком велик для такого маленького блока
+      // РџСЂРё СѓРјРµРЅСЊС€РµРЅРёРё СЃР»РѕРІР°СЂСЏ: СѓРјРµРЅСЊС€РёС‚СЊ СЂР°Р·РјРµСЂ С…СЌС€Р°, РµСЃР»Рё РѕРЅ СЃР»РёС€РєРѕРј РІРµР»РёРє РґР»СЏ С‚Р°РєРѕРіРѕ РјР°Р»РµРЅСЊРєРѕРіРѕ Р±Р»РѕРєР°
       m.hashsize  =  sizeof(PtrVal)  *  mymin (m.hashsize/sizeof(PtrVal), roundup_to_power_of(dict,2));
     else
-      // При увеличении словаря: пропорционально увеличить размер хеша
+      // РџСЂРё СѓРІРµР»РёС‡РµРЅРёРё СЃР»РѕРІР°СЂСЏ: РїСЂРѕРїРѕСЂС†РёРѕРЅР°Р»СЊРЅРѕ СѓРІРµР»РёС‡РёС‚СЊ СЂР°Р·РјРµСЂ С…РµС€Р°
       if (m.hashsize > 1*mb)
       {
-        if (m.hashsize<8*mb && m.hashsize<m.buffer/2)   m.hashsize = m.buffer/2;  // Во-первых, увеличим размер хеша, если он был подогнан под кеш Core2
-        uint h  =  mymin (uint64(dict) / (m.buffer/64) * (m.hashsize/64),  2*gb);  // Идеальный размер нового хеша
-        m.hashsize = mymin (round_to_nearest_power_of(h / m.hash_row_width, 2) * m.hash_row_width,  2*gb);  // Округлим размер хеша с учётом row_width
+        if (m.hashsize<8*mb && m.hashsize<m.buffer/2)   m.hashsize = m.buffer/2;  // Р’Рѕ-РїРµСЂРІС‹С…, СѓРІРµР»РёС‡РёРј СЂР°Р·РјРµСЂ С…РµС€Р°, РµСЃР»Рё РѕРЅ Р±С‹Р» РїРѕРґРѕРіРЅР°РЅ РїРѕРґ РєРµС€ Core2
+        // Р’С‹С‡РёСЃР»РёРј РёРґРµР°Р»СЊРЅС‹Р№ СЂР°Р·РјРµСЂ РЅРѕРІРѕРіРѕ С…РµС€Р° Рё РѕРєСЂСѓРіР»РёРј РµРіРѕ СЃ СѓС‡С‘С‚РѕРј row_width
+        m.hashsize = round_to_nearest_hashsize (LongMemSize(dict) / (m.buffer/64) * (m.hashsize/64), m.hash_row_width);
       }
     m.buffer = dict;
   }
 }
 
-// Записать в buf[MAX_METHOD_STRLEN] строку, описывающую метод сжатия и его параметры (функция, обратная к parse_TORNADO)
-void TORNADO_METHOD::ShowCompressionMethod (char *buf)
+#endif  // !defined (FREEARC_DECOMPRESS_ONLY)
+
+// РџРѕСЃС‡РёС‚Р°С‚СЊ, СЃРєРѕР»СЊРєРѕ РїР°РјСЏС‚Рё С‚СЂРµР±СѓРµС‚СЃСЏ РґР»СЏ СЂР°СЃРїР°РєРѕРІРєРё РґР°РЅРЅС‹С…, СЃР¶Р°С‚С‹С… Р·Р°РґР°РЅРЅС‹Рј РјРµС‚РѕРґРѕРј
+MemSize TORNADO_METHOD::GetDecompressionMem()
 {
-    struct PackMethod defaults = std_Tornado_method[m.number];  char NumStr[100], BufferStr[100], HashSizeStr[100], TempHashSizeStr[100], RowStr[100], EncStr[100], ParserStr[100], StepStr[100], TableStr[100], TempAuxHashSizeStr[100], AuxHashSizeStr[100], AuxRowStr[100];
+  return tornado_decompressor_outbuf_size(m.buffer) + LARGE_BUFFER_SIZE + 256*kb;
+}
+
+// Maximum possible inflation of incompressible input data
+LongMemSize TORNADO_METHOD::GetMaxCompressedSize (LongMemSize insize)
+{
+  switch (m.encoding_method)
+  {
+    case STORING:   return insize + 512;
+    case BYTECODER: return insize + (insize/4) + 512;
+    case BITCODER:  return insize + (insize/8) + 512;
+    case HUFCODER:
+    case ARICODER:  return insize + (insize/40) + 512;
+    default:        return COMPRESSION_METHOD::GetMaxCompressedSize(insize);
+  }
+}
+
+
+// Р—Р°РїРёСЃР°С‚СЊ РІ buf[MAX_METHOD_STRLEN] СЃС‚СЂРѕРєСѓ, РѕРїРёСЃС‹РІР°СЋС‰СѓСЋ РјРµС‚РѕРґ СЃР¶Р°С‚РёСЏ Рё РµРіРѕ РїР°СЂР°РјРµС‚СЂС‹ (С„СѓРЅРєС†РёСЏ, РѕР±СЂР°С‚РЅР°СЏ Рє parse_TORNADO)
+void TORNADO_METHOD::ShowCompressionMethod (char *buf, bool purify)
+{
+    struct PackMethod defaults = std_Tornado_method[m.number];  char NumStr[100], BufferStr[100], HashSizeStr[100], TempHashSizeStr[100], RowStr[100], EncStr[100], ParserStr[100], StepStr[100], TableStr[100], TempAuxHashSizeStr[100], AuxHashSizeStr[100], AuxRowStr[100], FastBytesStr[100], Hash3Str[100], MatchFinderStr[100];
     showMem (m.buffer,       BufferStr);
     showMem (m.hashsize,     TempHashSizeStr);
     showMem (m.auxhash_size, TempAuxHashSizeStr);
-    sprintf (NumStr,         m.number            != default_Tornado_method?     ":%d"    : "", m.number);
-    sprintf (HashSizeStr,    m.hashsize          != defaults.hashsize?          ":h%s"   : "", TempHashSizeStr);
-    sprintf (RowStr,         m.hash_row_width    != defaults.hash_row_width?    ":l%d"   : "", m.hash_row_width);
-    sprintf (EncStr,         m.encoding_method   != defaults.encoding_method?   ":c%d"   : "", m.encoding_method);
-    sprintf (ParserStr,      m.match_parser      != defaults.match_parser?      ":p%d"   : "", m.match_parser);
-    sprintf (StepStr,        m.update_step       != defaults.update_step?       ":u%d"   : "", m.update_step);
-    sprintf (TableStr,       m.find_tables       != defaults.find_tables?       ":t%d"   : "", m.find_tables);
-    sprintf (AuxHashSizeStr, m.auxhash_size      != defaults.auxhash_size?      ":ah%s"  : "", TempAuxHashSizeStr);
-    sprintf (AuxRowStr,      m.auxhash_row_width != defaults.auxhash_row_width? ":al%d"  : "", m.auxhash_row_width);
-    sprintf (buf, "tor%s:%s%s%s%s%s%s%s%s%s", NumStr, BufferStr, HashSizeStr, RowStr, EncStr, ParserStr, StepStr, TableStr, AuxHashSizeStr, AuxRowStr);
+    sprintf (NumStr,                    m.number            != default_Tornado_method?     ":%d"    : "", m.number);
+    sprintf (HashSizeStr,               m.hashsize          != defaults.hashsize?          ":h%s"   : "", TempHashSizeStr);
+    sprintf (RowStr,                    m.hash_row_width    != defaults.hash_row_width?    ":l%d"   : "", m.hash_row_width);
+    sprintf (EncStr,                    m.encoding_method   != defaults.encoding_method?   ":c%d"   : "", m.encoding_method);
+    sprintf (ParserStr,      !purify && m.match_parser      != defaults.match_parser?      ":p%d"   : "", m.match_parser);
+    sprintf (StepStr,                   m.update_step       != defaults.update_step?       ":u%d"   : "", m.update_step);
+    sprintf (TableStr,                  m.find_tables       != defaults.find_tables?       ":t%d"   : "", m.find_tables);
+    sprintf (Hash3Str,       !purify && m.hash3             != defaults.hash3?             ":s%d"   : "", m.hash3);
+    sprintf (MatchFinderStr, !purify && m.match_finder      != defaults.match_finder?      ":x%d"   : "", m.match_finder);
+    sprintf (AuxHashSizeStr,            m.auxhash_size      != defaults.auxhash_size?      ":ah%s"  : "", TempAuxHashSizeStr);
+    sprintf (AuxRowStr,                 m.auxhash_row_width != defaults.auxhash_row_width? ":al%d"  : "", m.auxhash_row_width);
+    sprintf (FastBytesStr,   !purify && m.fast_bytes        != defaults.fast_bytes?        ":fb%d"  : "", m.fast_bytes);
+    sprintf (buf, "tor%s:%s%s%s%s%s%s%s%s%s%s%s%s", NumStr, BufferStr, HashSizeStr, RowStr, EncStr, ParserStr, MatchFinderStr, StepStr, TableStr, AuxHashSizeStr, AuxRowStr, Hash3Str, FastBytesStr);
 }
 
-#endif  // !defined (FREEARC_DECOMPRESS_ONLY)
-
-// Конструирует объект типа TORNADO_METHOD с заданными параметрами упаковки
-// или возвращает NULL, если это другой метод сжатия или допущена ошибка в параметрах
+// РљРѕРЅСЃС‚СЂСѓРёСЂСѓРµС‚ РѕР±СЉРµРєС‚ С‚РёРїР° TORNADO_METHOD СЃ Р·Р°РґР°РЅРЅС‹РјРё РїР°СЂР°РјРµС‚СЂР°РјРё СѓРїР°РєРѕРІРєРё
+// РёР»Рё РІРѕР·РІСЂР°С‰Р°РµС‚ NULL, РµСЃР»Рё СЌС‚Рѕ РґСЂСѓРіРѕР№ РјРµС‚РѕРґ СЃР¶Р°С‚РёСЏ РёР»Рё РґРѕРїСѓС‰РµРЅР° РѕС€РёР±РєР° РІ РїР°СЂР°РјРµС‚СЂР°С…
 COMPRESSION_METHOD* parse_TORNADO (char** parameters)
 {
   if (strcmp (parameters[0], "tor") == 0) {
-    // Если название метода (нулевой параметр) - "tor", то разберём остальные параметры
+    // Р•СЃР»Рё РЅР°Р·РІР°РЅРёРµ РјРµС‚РѕРґР° (РЅСѓР»РµРІРѕР№ РїР°СЂР°РјРµС‚СЂ) - "tor", С‚Рѕ СЂР°Р·Р±РµСЂС‘Рј РѕСЃС‚Р°Р»СЊРЅС‹Рµ РїР°СЂР°РјРµС‚СЂС‹
 
     TORNADO_METHOD *p = new TORNADO_METHOD;
-    int error = 0;  // Признак того, что при разборе параметров произошла ошибка
+    int error = 0;  // РџСЂРёР·РЅР°Рє С‚РѕРіРѕ, С‡С‚Рѕ РїСЂРё СЂР°Р·Р±РѕСЂРµ РїР°СЂР°РјРµС‚СЂРѕРІ РїСЂРѕРёР·РѕС€Р»Р° РѕС€РёР±РєР°
 
-    // Переберём все параметры метода (или выйдем раньше при возникновении ошибки при разборе очередного параметра)
+    // РџРµСЂРµР±РµСЂС‘Рј РІСЃРµ РїР°СЂР°РјРµС‚СЂС‹ РјРµС‚РѕРґР° (РёР»Рё РІС‹Р№РґРµРј СЂР°РЅСЊС€Рµ РїСЂРё РІРѕР·РЅРёРєРЅРѕРІРµРЅРёРё РѕС€РёР±РєРё РїСЂРё СЂР°Р·Р±РѕСЂРµ РѕС‡РµСЂРµРґРЅРѕРіРѕ РїР°СЂР°РјРµС‚СЂР°)
     while (*++parameters && !error)
     {
       char* param = *parameters;
-      switch (*param) {                    // Параметры, содержащие значения
+      switch (*param) {                    // РџР°СЂР°РјРµС‚СЂС‹, СЃРѕРґРµСЂР¶Р°С‰РёРµ Р·РЅР°С‡РµРЅРёСЏ
         case 'b': p->m.buffer          = parseMem (param+1, &error); continue;
         case 'h': p->m.hashsize        = parseMem (param+1, &error); continue;
         case 'l': p->m.hash_row_width  = parseInt (param+1, &error); continue;
         case 'c': p->m.encoding_method = parseInt (param+1, &error); continue;
         case 'p': p->m.match_parser    = parseInt (param+1, &error); continue;
+        case 'x': p->m.match_finder    = parseInt (param+1, &error); continue;
+        case 's': p->m.hash3           = parseInt (param+1, &error); continue;
         case 'u': p->m.update_step     = parseInt (param+1, &error); continue;
         case 't': p->m.find_tables     = parseInt (param+1, &error); continue;
-        case 'a': switch (param[1]) {      // Параметры ah/al
+        case 'a': switch (param[1]) {      // РџР°СЂР°РјРµС‚СЂС‹ ah/al
                     case 'h': p->m.auxhash_size       = parseMem (param+2, &error); continue;
                     case 'l': p->m.auxhash_row_width  = parseInt (param+2, &error); continue;
                   }
       }
-      // Сюда мы попадаем, если в параметре не указано его название
-      // Если этот параметр удастся разобрать как целое число (т.е. в нём - только цифры),
-      // то будем считать, что это номер пресета, иначе попробуем разобрать его как buffer
+      if (start_with(param,"fb"))   {p->m.fast_bytes = parseInt (param+2, &error); continue;}
+      // РЎСЋРґР° РјС‹ РїРѕРїР°РґР°РµРј, РµСЃР»Рё РІ РїР°СЂР°РјРµС‚СЂРµ РЅРµ СѓРєР°Р·Р°РЅРѕ РµРіРѕ РЅР°Р·РІР°РЅРёРµ
+      // Р•СЃР»Рё СЌС‚РѕС‚ РїР°СЂР°РјРµС‚СЂ СѓРґР°СЃС‚СЃСЏ СЂР°Р·РѕР±СЂР°С‚СЊ РєР°Рє С†РµР»РѕРµ С‡РёСЃР»Рѕ (С‚.Рµ. РІ РЅС‘Рј - С‚РѕР»СЊРєРѕ С†РёС„СЂС‹),
+      // С‚Рѕ Р±СѓРґРµРј СЃС‡РёС‚Р°С‚СЊ, С‡С‚Рѕ СЌС‚Рѕ РЅРѕРјРµСЂ РїСЂРµСЃРµС‚Р°, РёРЅР°С‡Рµ РїРѕРїСЂРѕР±СѓРµРј СЂР°Р·РѕР±СЂР°С‚СЊ РµРіРѕ РєР°Рє buffer
       int n = parseInt (param, &error);
-      if (!error)  p->m = std_Tornado_method[n];
-      else         error=0, p->m.buffer = parseMem (param, &error);
+      if (!error && n < elements(std_Tornado_method))  p->m = std_Tornado_method[n];
+      else                                             error=0, p->m.buffer = parseMem (param, &error);
     }
 
-    if (error)  {delete p; return NULL;}  // Ошибка при парсинге параметров метода
+    if (error)  {delete p; return NULL;}  // РћС€РёР±РєР° РїСЂРё РїР°СЂСЃРёРЅРіРµ РїР°СЂР°РјРµС‚СЂРѕРІ РјРµС‚РѕРґР°
     return p;
   } else
-    return NULL;   // Это не метод TORNADO
+    return NULL;   // Р­С‚Рѕ РЅРµ РјРµС‚РѕРґ TORNADO
 }
 
-static int TORNADO_x = AddCompressionMethod (parse_TORNADO);   // Зарегистрируем парсер метода TORNADO
+static int TORNADO_x = AddCompressionMethod (parse_TORNADO);   // Р—Р°СЂРµРіРёСЃС‚СЂРёСЂСѓРµРј РїР°СЂСЃРµСЂ РјРµС‚РѕРґР° TORNADO

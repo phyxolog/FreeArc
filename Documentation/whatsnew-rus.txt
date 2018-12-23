@@ -1,0 +1,8 @@
+﻿FreeArc 0.67
+
+Изменения в этой версии:
+
+    * Сжатие в архивы форматов zip и 7z
+
+и множество более мелких изменений, полный список:
+http://code.google.com/p/freearc/issues/list?can=1&q=status:fixed%20milestone=0.67

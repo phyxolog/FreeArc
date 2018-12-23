@@ -1,5 +1,9 @@
 /* LzmaEnc.c -- LZMA Encoder
-2009-04-22 : Igor Pavlov : Public domain */
+(c) 2009-04-22 Igor Pavlov
+(c) 2008,2009,2013 Bulat Ziganshin
+This code made available under GPL license.
+For a commercial license write to Bulat.Ziganshin@gmail.com
+*/
 
 #include <string.h>
 
@@ -63,7 +67,7 @@ void LzmaEncProps_Normalize(CLzmaEncProps *p)
   if (p->fb < 0) p->fb = (level < 7 ? 32 : 64);
   if (p->btMode < 0) p->btMode = (p->algo == 0 ? MF_HashChain : MF_BinaryTree);
   if (p->numHashBytes < 0) p->numHashBytes = 4;
-  if (p->mc == 0)  p->mc = 16 + p->fb / (p->btMode==MF_BinaryTree ? 2 : 4);
+  if (p->mc == 0)  p->mc = (p->btMode==MF_HashTable? (p->fb/2) : p->btMode==MF_BinaryTree? 16+(p->fb/2) : 16+(p->fb/4));
   if (p->numThreads < 0)
     p->numThreads =
       #ifdef COMPRESS_MF_MT
@@ -96,15 +100,15 @@ UInt32 LzmaEncProps_GetDictSize(const CLzmaEncProps *props2)
   return props.dictSize;
 }
 
-/* #define LZMA_LOG_BSR */
-/* Define it for Intel's CPU */
+/* Define it for Intel CPUs */
+#define LZMA_LOG_BSR
 
 
 #ifdef LZMA_LOG_BSR
 
-#define kDicLogSizeMaxCompress 30
+#define kDicLogSizeMaxCompress 32
 
-#define BSR2_RET(pos, res) { unsigned long i; _BitScanReverse(&i, (pos)); res = (i + i) + ((pos >> (i - 1)) & 1); }
+#define BSR2_RET(pos, res) { int i = lb(pos); (res) = (i + i) + (((pos) >> (i - 1)) & 1); }
 
 UInt32 GetPosSlot1(UInt32 pos)
 {
@@ -412,10 +416,8 @@ SRes LzmaEnc_SetProps(CLzmaEncHandle pp, const CLzmaEncProps *props2)
   LzmaEncProps_Normalize(&props);
 
   if (props.lc > LZMA_LC_MAX || props.lp > LZMA_LP_MAX || props.pb > LZMA_PB_MAX ||
-      props.dictSize > (1 << kDicLogSizeMaxCompress) || props.dictSize > (1 << 30))
-    return SZ_ERROR_PARAM;
-  // Bulat: dict>959m doesn't work for some reason
-  if (props.dictSize > (kMaxValForNormalize-kNormalizeStepMin-1*mb+1))
+      props.dictSize > ((UInt64)1 << kDicLogSizeMaxCompress) ||
+      props.dictSize > 4000u*mb)  /* In fact, current code supports dictSize<4032mb */
     return SZ_ERROR_PARAM;
 
   p->dictSize = props.dictSize;
@@ -483,15 +485,16 @@ static void RangeEnc_Construct(CRangeEnc *p)
 
 #define RangeEnc_GetProcessed(p) ((p)->processed + ((p)->buf - (p)->bufBase) + (p)->cacheSize)
 
-#define RC_BUF_SIZE (1 << 16)
-static int RangeEnc_Alloc(CRangeEnc *p, ISzAlloc *alloc)
+#define RC_BUF_SIZE(dict) BUFFER_SIZE  /* output buffer size */
+
+static int RangeEnc_Alloc(CRangeEnc *p, UInt32 dictSize, ISzAlloc *alloc)
 {
   if (p->bufBase == 0)
   {
-    p->bufBase = (Byte *)alloc->Alloc(alloc, RC_BUF_SIZE);
+    p->bufBase = (Byte *)alloc->Alloc(alloc, RC_BUF_SIZE(dictSize));
     if (p->bufBase == 0)
       return 0;
-    p->bufLim = p->bufBase + RC_BUF_SIZE;
+    p->bufLim = p->bufBase + RC_BUF_SIZE(dictSize);
   }
   return 1;
 }
@@ -1571,14 +1574,14 @@ static UInt32 GetOptimumFast(CLzmaEnc *p, UInt32 *backRes)
       mainLen = matches[numPairs - 2];
       mainDist = matches[numPairs - 1];
     }
-    // Отбросим матч, если дистанция слишком велика для такой длины
+    // РћС‚Р±СЂРѕСЃРёРј РјР°С‚С‡, РµСЃР»Рё РґРёСЃС‚Р°РЅС†РёСЏ СЃР»РёС€РєРѕРј РІРµР»РёРєР° РґР»СЏ С‚Р°РєРѕР№ РґР»РёРЅС‹
     static const int maxDist[] = {0, 0, 128, 2048, 64<<10, 2<<20, 12<<20};
     if (mainLen < sizeof(maxDist)/sizeof(*maxDist)
     	&& mainDist >= maxDist[mainLen])
       mainLen = 1;
   }
 
-  // Если нашёлся подходящий REPDIST, то используем его при определённых условиях
+  // Р•СЃР»Рё РЅР°С€С‘Р»СЃСЏ РїРѕРґС…РѕРґСЏС‰РёР№ REPDIST, С‚Рѕ РёСЃРїРѕР»СЊР·СѓРµРј РµРіРѕ РїСЂРё РѕРїСЂРµРґРµР»С‘РЅРЅС‹С… СѓСЃР»РѕРІРёСЏС…
   if (repLen >= 2 && (
         (repLen + 1 >= mainLen) ||
         (repLen + 2 >= mainLen && mainDist >= (1 << 9)) ||
@@ -1612,7 +1615,7 @@ static UInt32 GetOptimumFast(CLzmaEnc *p, UInt32 *backRes)
       continue;
     limit = mainLen - 1;
     for (len = 2; len < limit && data[len] == data2[len]; len++);
-    // Если нашёлся подходящий REPDIST, то используем его при определённых условиях
+    // Р•СЃР»Рё РЅР°С€С‘Р»СЃСЏ РїРѕРґС…РѕРґСЏС‰РёР№ REPDIST, С‚Рѕ РёСЃРїРѕР»СЊР·СѓРµРј РµРіРѕ РїСЂРё РѕРїСЂРµРґРµР»С‘РЅРЅС‹С… СѓСЃР»РѕРІРёСЏС…
     if ((len     >= limit) ||
         (len + 1 >= limit && mainDist >= (1 << 9)) ||
         (len + 2 >= limit && mainDist >= (1 << 15)))
@@ -1926,12 +1929,10 @@ static SRes LzmaEnc_CodeOneBlock(CLzmaEnc *p, Bool useLimits, UInt32 maxPackSize
 static SRes LzmaEnc_Alloc(CLzmaEnc *p, UInt32 keepWindowSize, ISzAlloc *alloc, ISzAlloc *allocBig)
 {
   UInt32 beforeSize = kNumOpts;
-  Bool btMode;
-  if (!RangeEnc_Alloc(&p->rc, alloc))
+  if (!RangeEnc_Alloc(&p->rc, p->dictSize, alloc))
     return SZ_ERROR_MEM;
-  btMode = p->matchFinderBase.btMode;
   #ifdef COMPRESS_MF_MT
-  p->mtMode = (p->multiThread && !p->fastMode /*&& btMode==MF_BinaryTree*/);
+  p->mtMode = (p->multiThread && !p->fastMode /*&& p->matchFinderBase.btMode==MF_BinaryTree*/);
   #endif
 
   {

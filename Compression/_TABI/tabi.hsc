@@ -1,9 +1,10 @@
-{-# OPTIONS -fglasgow-exts #-}
+{-# OPTIONS -fglasgow-exts -cpp #-}
 module TABI (
   Value(..),
   FUNCTION,
   C_FUNCTION,
   ELEMENT(..),
+  WideString(..),
 --  dump,
 --  dump_n,
   callret,               -- :: Value a => C_FUNCTION -> [ELEMENT] -> IO a
@@ -14,9 +15,11 @@ module TABI (
 ) where
 
 import Prelude hiding (catch)
-import Control.Exception
+import Control.OldException
 import Control.Monad
 import Data.IORef
+import Data.Int
+import Data.Maybe
 import Data.Word
 import Foreign
 import Foreign.C
@@ -25,12 +28,18 @@ import Foreign.C
 #include "tabi.h"
 
 
-
 -- Rules of serialization for values that may be passed via TABI
 class Value a where
   typeOf :: a -> Int32                          -- ^Integer constant that represents this type of values
   pokeValue :: Ptr () -> a -> IO (IO ())        -- ^Write value to given memory address and return action that will free memory buffers allocated for this value
   peekValue :: Int32 -> Ptr () -> IO (Maybe a)  -- ^Read value from given memory address if its type allows conversion to type `a`
+
+
+instance Value Bool where
+  typeOf _ = #{const TABI_BOOL}
+  pokeValue ptr a  =  poke (castPtr ptr :: Ptr Int32) (fromIntegral$ fromEnum a) >> return doNothing
+  peekValue t ptr | t == #{const TABI_BOOL}  =  peek (castPtr ptr :: Ptr Int32) >>= return.Just .toEnum.fromIntegral
+                  | otherwise                =  return Nothing
 
 instance Value Int where
   typeOf _ = #{const TABI_INTEGER}
@@ -50,6 +59,31 @@ instance Value CUInt where
   peekValue t ptr | t == #{const TABI_INTEGER}  =  peek (castPtr ptr :: Ptr Int64) >>= return.Just .fromIntegral
                   | otherwise                   =  return Nothing
 
+instance Value Int32 where
+  typeOf _ = #{const TABI_INTEGER}
+  pokeValue ptr a  =  poke (castPtr ptr :: Ptr Int64) (fromIntegral a) >> return doNothing
+  peekValue t ptr | t == #{const TABI_INTEGER}  =  peek (castPtr ptr :: Ptr Int64) >>= return.Just .fromIntegral
+                  | otherwise                   =  return Nothing
+
+instance Value Word32 where
+  typeOf _ = #{const TABI_INTEGER}
+  pokeValue ptr a  =  poke (castPtr ptr :: Ptr Int64) (fromIntegral a) >> return doNothing
+  peekValue t ptr | t == #{const TABI_INTEGER}  =  peek (castPtr ptr :: Ptr Int64) >>= return.Just .fromIntegral
+                  | otherwise                   =  return Nothing
+
+instance Value Int64 where
+  typeOf _ = #{const TABI_INTEGER}
+  pokeValue ptr a  =  poke (castPtr ptr :: Ptr Int64) (fromIntegral a) >> return doNothing
+  peekValue t ptr | t == #{const TABI_INTEGER}  =  peek (castPtr ptr :: Ptr Int64) >>= return.Just .fromIntegral
+                  | otherwise                   =  return Nothing
+
+instance Value Word64 where
+  typeOf _ = #{const TABI_INTEGER}
+  pokeValue ptr a  =  poke (castPtr ptr :: Ptr Int64) (fromIntegral a) >> return doNothing
+  peekValue t ptr | t == #{const TABI_INTEGER}  =  peek (castPtr ptr :: Ptr Int64) >>= return.Just .fromIntegral
+                  | otherwise                   =  return Nothing
+
+
 instance Value Double where
   typeOf _ = #{const TABI_FLOATING}
   pokeValue ptr a  =  poke (castPtr ptr :: Ptr CDouble) (fromRational$ toRational a) >> return doNothing
@@ -64,6 +98,16 @@ instance Value String where
                            return (free cstr)
   peekValue t ptr | t == #{const TABI_STRING}   =  peek (castPtr ptr :: Ptr CString) >>= peekCAString >>= return.Just
                   | otherwise                   =  return Nothing
+
+newtype WideString a = W a
+
+instance Value (WideString String) where
+  typeOf _ = #{const TABI_WIDE_STRING}
+  pokeValue ptr (W str)  =  do cstr <- raiseIfNull "failed malloc for TABI_WIDE_STRING" (newCWString str)
+                               poke (castPtr ptr) cstr
+                               return (free cstr)
+  peekValue t ptr | t == #{const TABI_WIDE_STRING}   =  peek (castPtr ptr :: Ptr CWString) >>= peekCWString >>= return.Just. W
+                  | otherwise                        =  return Nothing
 
 instance Value (Ptr a) where
   typeOf _ = #{const TABI_PTR}
@@ -88,19 +132,27 @@ foreign import ccall safe "wrapper"
 foreign import ccall "dynamic"
    mkFUNCTION_DYNAMIC :: FunPtr C_FUNCTION -> C_FUNCTION
 
+instance Value C_FUNCTION where
+  typeOf _ = #{const TABI_FUNCPTR}
+  -- Write pointer to C_FUNCTION to memory
+  pokeValue ptr c_callback =  do funptr_c_callback <- mkFUNCTION_WRAPPER c_callback
+                                 poke (castPtr ptr) funptr_c_callback
+                                 return (freeHaskellFunPtr funptr_c_callback)
+  -- Read pointer to C_FUNCTION
+  peekValue t ptr | t == #{const TABI_FUNCPTR}  =
+                                                   do c_callback <- mkFUNCTION_DYNAMIC `fmap` peek (castPtr ptr)
+                                                      return (Just c_callback)
+                  | otherwise                   =  return Nothing
+
+
 instance Value FUNCTION where
   typeOf _ = #{const TABI_FUNCPTR}
   -- Write to memory C wrapper around Haskell FUNCTION
   pokeValue ptr callback =  do let c_callback params  =  fromIntegral `fmap` callback params
-                               funptr_c_callback <- mkFUNCTION_WRAPPER c_callback
-                               poke (castPtr ptr) funptr_c_callback
-                               return (freeHaskellFunPtr funptr_c_callback)
+                               pokeValue ptr (c_callback :: C_FUNCTION)
   -- Read pointer to C_FUNCTION and convert it to Haskell FUNCTION
-  peekValue t ptr | t == #{const TABI_FUNCPTR}  =
-                                                   do c_callback <- mkFUNCTION_DYNAMIC `fmap` peek (castPtr ptr)
-                                                      let callback params  =  fromIntegral `fmap` c_callback params
-                                                      return (Just callback)
-                  | otherwise                   =  return Nothing
+  peekValue t ptr = do c_callback  <- peekValue t ptr
+                       return$ fmap (fmap fromIntegral.) (c_callback :: Maybe C_FUNCTION)
 
 
 
@@ -154,12 +206,12 @@ call server params = do
 
 
 -- |Unmarshall required parameter
-required params name        =  parameter params name (raise ("required parameter "++name++" not found"))
+required params name        =  parameter params name (raise ("required parameter <<"++name++">> not found"))
 
 -- |Unmarshall optional parameter with default value deflt
 optional params name deflt  =  parameter params name (return deflt)
 
--- |Unmarshall parameter from table executing default_action when it not found
+-- |Unmarshall parameter from table executing default_action when it's not found
 parameter params name default_action = do
   ptr <- find params name
   if ptr==nullPtr then default_action else do
@@ -167,7 +219,7 @@ parameter params name default_action = do
   v <- peekValue t (valueField ptr)
   case v of
     Just value -> return value
-    Nothing    -> raise ("parameter "++name++": type mismatch ("++show t++")")
+    Nothing    -> raise ("parameter <<"++name++">>: type mismatch (expected "++show (typeOf (fromJust v))++", actual "++show t++")")
 
 -- |Search C array of TABI_ELEMENTs for element having given name
 find c_params name = go c_params

@@ -1,37 +1,12 @@
 #include "../Compression.h"
 
-int lzma_compress   (int dictionarySize,
-                     int hashSize,
-                     int algorithm,
-                     int numFastBytes,
-                     int matchFinder,
-                     int matchFinderCycles,
-                     int posStateBits,
-                     int litContextBits,
-                     int litPosBits,
-                     CALLBACK_FUNC *callback,
-                     void *auxdata);
-
-int lzma_decompress (int dictionarySize,
-                     int hashSize,
-                     int algorithm,
-                     int numFastBytes,
-                     int matchFinder,
-                     int matchFinderCycles,
-                     int posStateBits,
-                     int litContextBits,
-                     int litPosBits,
-                     CALLBACK_FUNC *callback,
-                     void *auxdata);
-
-
 #ifdef __cplusplus
 
-// Реализация стандартного интерфейса методов сжатия COMPRESSION_METHOD
+// Р РµР°Р»РёР·Р°С†РёСЏ СЃС‚Р°РЅРґР°СЂС‚РЅРѕРіРѕ РёРЅС‚РµСЂС„РµР№СЃР° РјРµС‚РѕРґРѕРІ СЃР¶Р°С‚РёСЏ COMPRESSION_METHOD
 class LZMA_METHOD : public COMPRESSION_METHOD
 {
 public:
-  // Параметры этого метода сжатия
+  // РџР°СЂР°РјРµС‚СЂС‹ СЌС‚РѕРіРѕ РјРµС‚РѕРґР° СЃР¶Р°С‚РёСЏ
   MemSize dictionarySize;
   MemSize hashSize;
   int     algorithm;
@@ -42,30 +17,36 @@ public:
   int     litContextBits;
   int     litPosBits;
 
-  // Конструктор, присваивающий параметрам метода сжатия значения по умолчанию
+  // РљРѕРЅСЃС‚СЂСѓРєС‚РѕСЂ, РїСЂРёСЃРІР°РёРІР°СЋС‰РёР№ РїР°СЂР°РјРµС‚СЂР°Рј РјРµС‚РѕРґР° СЃР¶Р°С‚РёСЏ Р·РЅР°С‡РµРЅРёСЏ РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ
   LZMA_METHOD();
 
-  // Функции распаковки и упаковки
+  // РЈРЅРёРІРµСЂСЃР°Р»СЊРЅС‹Р№ РјРµС‚РѕРґ, РѕС‚РІРµС‡Р°РµС‚ РЅР° Р·Р°РїСЂРѕСЃ "has_progress?"
+  virtual int doit (char *what, int param, void *data, CALLBACK_FUNC *callback);
+  // РЈРїР°РєРѕРІРєР°/СЂР°СЃРїР°РєРѕРІРєР° РІ РїР°РјСЏС‚Рё
+  virtual int DeCompressMem (COMPRESSION direction, void *input, int inputSize, void *output, int *outputSize, CALLBACK_FUNC *callback=0, void *auxdata=0, void **CodecState=0);
+  // Р¤СѓРЅРєС†РёРё СЂР°СЃРїР°РєРѕРІРєРё Рё СѓРїР°РєРѕРІРєРё
   virtual int decompress (CALLBACK_FUNC *callback, void *auxdata);
 #ifndef FREEARC_DECOMPRESS_ONLY
-  virtual int compress (CALLBACK_FUNC *callback, void *auxdata);
+  virtual int compress   (CALLBACK_FUNC *callback, void *auxdata);
 
-  // Записать в buf[MAX_METHOD_STRLEN] строку, описывающую метод сжатия и его параметры (функция, обратная к parse_LZMA)
-  virtual void ShowCompressionMethod (char *buf);
+  // Р’С‹С‡РёСЃР»СЏРµС‚ РѕР±С‰РёР№ СЂР°СЃС…РѕРґ РїР°РјСЏС‚Рё Рё СЂР°Р·РјРµСЂ С…РµС€-С‚Р°Р±Р»РёС†С‹ РїСЂРё СѓРїР°РєРѕРІРєРµ
+  void CalcCompressionMemories (MemSize *pmem, MemSize *phashSize);
 
-  // Получить/установить объём памяти, используемой при упаковке/распаковке, размер словаря или размер блока
-  virtual MemSize GetCompressionMem     (void);
-  virtual MemSize GetDictionary         (void)         {return dictionarySize;}
-  virtual MemSize GetBlockSize          (void)         {return 0;}
-  virtual void    SetCompressionMem     (MemSize mem);
-  virtual void    SetDecompressionMem   (MemSize mem);
-  virtual void    SetDictionary         (MemSize dict);
-  virtual void    SetBlockSize          (MemSize)      {}
+  // РџРѕР»СѓС‡РёС‚СЊ/СѓСЃС‚Р°РЅРѕРІРёС‚СЊ РѕР±СЉС‘Рј РїР°РјСЏС‚Рё, РёСЃРїРѕР»СЊР·СѓРµРјРѕР№ РїСЂРё СѓРїР°РєРѕРІРєРµ/СЂР°СЃРїР°РєРѕРІРєРµ, СЂР°Р·РјРµСЂ СЃР»РѕРІР°СЂСЏ РёР»Рё СЂР°Р·РјРµСЂ Р±Р»РѕРєР°
+  virtual MemSize GetCompressionMem        (void);
+  virtual void    SetCompressionMem        (MemSize mem);
+  virtual void    SetMinDecompressionMem   (MemSize mem);
+  virtual void    SetDictionary            (MemSize dict);
 #endif
-  virtual MemSize GetDecompressionMem   (void);
+  virtual MemSize GetDictionary            (void)               {return dictionarySize;}
+  virtual MemSize GetDecompressionMem      (void);
+  virtual LongMemSize GetMaxCompressedSize (LongMemSize insize) {return insize + (insize/40) + 512;}
+
+  // Р—Р°РїРёСЃР°С‚СЊ РІ buf[MAX_METHOD_STRLEN] СЃС‚СЂРѕРєСѓ, РѕРїРёСЃС‹РІР°СЋС‰СѓСЋ РјРµС‚РѕРґ СЃР¶Р°С‚РёСЏ Рё РµРіРѕ РїР°СЂР°РјРµС‚СЂС‹ (С„СѓРЅРєС†РёСЏ, РѕР±СЂР°С‚РЅР°СЏ Рє parse_LZMA)
+  virtual void ShowCompressionMethod (char *buf, bool purify);
 };
 
-// Разборщик строки метода сжатия LZMA
+// Р Р°Р·Р±РѕСЂС‰РёРє СЃС‚СЂРѕРєРё РјРµС‚РѕРґР° СЃР¶Р°С‚РёСЏ LZMA
 COMPRESSION_METHOD* parse_LZMA (char** parameters);
 
 #endif  // __cplusplus

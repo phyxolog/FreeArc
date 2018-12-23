@@ -18,7 +18,7 @@ static int CALLBACK BrowseCallbackProc(HWND hwnd, UINT uMsg, LPARAM lParam, LPAR
   return 0;
 }
 
-// Дать пользователю выбрать каталог
+// Р”Р°С‚СЊ РїРѕР»СЊР·РѕРІР°С‚РµР»СЋ РІС‹Р±СЂР°С‚СЊ РєР°С‚Р°Р»РѕРі
 int BrowseForFolder(TCHAR *prompt, TCHAR *in_filename, TCHAR *out_filename)
 {
   BROWSEINFO bi;
@@ -49,7 +49,7 @@ int BrowseForFolder(TCHAR *prompt, TCHAR *in_filename, TCHAR *out_filename)
 }
 
 
-// Дать пользователю выбрать файл
+// Р”Р°С‚СЊ РїРѕР»СЊР·РѕРІР°С‚РµР»СЋ РІС‹Р±СЂР°С‚СЊ С„Р°Р№Р»
 int BrowseForFile(TCHAR *prompt, TCHAR *filters, TCHAR *in_filename, TCHAR *out_filename)
 {
   OPENFILENAME ofn;
@@ -82,10 +82,10 @@ int BrowseForFile(TCHAR *prompt, TCHAR *filters, TCHAR *in_filename, TCHAR *out_
   return GetOpenFileName(&ofn)? 1 : 0;
 }
 
-// Превратить время/дату файла в строку в соответствии с настройками locale или заданными форматами времени и даты
+// РџСЂРµРІСЂР°С‚РёС‚СЊ РІСЂРµРјСЏ/РґР°С‚Сѓ С„Р°Р№Р»Р° РІ СЃС‚СЂРѕРєСѓ РІ СЃРѕРѕС‚РІРµС‚СЃС‚РІРёРё СЃ РЅР°СЃС‚СЂРѕР№РєР°РјРё locale РёР»Рё Р·Р°РґР°РЅРЅС‹РјРё С„РѕСЂРјР°С‚Р°РјРё РІСЂРµРјРµРЅРё Рё РґР°С‚С‹
 void GuiFormatDateTime (time_t t, char *buf, int bufsize, char *date_format, char *time_format)
 {
-  if (t==-1)  t=0;  // Иначе получим вылет :(
+  if (t<0)  t=INT_MAX;  // РРЅР°С‡Рµ РїРѕР»СѓС‡Р°РµРј РІС‹Р»РµС‚ :(
 
   FILETIME ft1, ft2;
   UnixTimeToFileTime (t, &ft1);
@@ -99,5 +99,14 @@ void GuiFormatDateTime (time_t t, char *buf, int bufsize, char *date_format, cha
   GetTimeFormatA(LOCALE_USER_DEFAULT, 0, &datetime, time_format, p, bufsize - (p-buf));
 }
 
-#endif // Windows/Unix
+// РџРѕР»СѓС‡РёС‚СЊ С‚РёРї С„Р°Р№Р»Р° РїРѕ РµРіРѕ СЂР°СЃС€РёСЂРµРЅРёСЋ
+void GuiGetFileType (TCHAR *ext, TCHAR *buf)
+{
+  SHFILEINFO sfi;
+  if (SHGetFileInfoW(ext, FILE_ATTRIBUTE_NORMAL, &sfi, sizeof(sfi), SHGFI_TYPENAME | SHGFI_USEFILEATTRIBUTES))
+    _tcscpy(buf, sfi.szTypeName);
+  else
+    _tcscpy(buf, _T(""));
+}
 
+#endif // Windows/Unix

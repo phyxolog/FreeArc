@@ -7,14 +7,15 @@ extern "C" {
 #include "rep.cpp"
 
 /*-------------------------------------------------*/
-/* Реализация класса REP_METHOD                    */
+/* Р РµР°Р»РёР·Р°С†РёСЏ РєР»Р°СЃСЃР° REP_METHOD                    */
 /*-------------------------------------------------*/
 
-// Конструктор, присваивающий параметрам метода сжатия значения по умолчанию
+// РљРѕРЅСЃС‚СЂСѓРєС‚РѕСЂ, РїСЂРёСЃРІР°РёРІР°СЋС‰РёР№ РїР°СЂР°РјРµС‚СЂР°Рј РјРµС‚РѕРґР° СЃР¶Р°С‚РёСЏ Р·РЅР°С‡РµРЅРёСЏ РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ
 REP_METHOD::REP_METHOD()
 {
   BlockSize      = 64*mb;
   MinCompression = 100;
+  ChunkSize      = 0;
   MinMatchLen    = 512;
   HashSizeLog    = 0;
   Barrier        = INT_MAX;
@@ -22,112 +23,110 @@ REP_METHOD::REP_METHOD()
   Amplifier      = 1;
 }
 
-// Функция распаковки
+// Р¤СѓРЅРєС†РёСЏ СЂР°СЃРїР°РєРѕРІРєРё
 int REP_METHOD::decompress (CALLBACK_FUNC *callback, void *auxdata)
 {
   // Use faster function from DLL if possible
   static FARPROC f = LoadFromDLL ("rep_decompress");
   if (!f) f = (FARPROC) rep_decompress;
 
-  return ((int (__cdecl *)(MemSize, int, int, int, int, int, int, CALLBACK_FUNC*, void*)) f)
-                          (BlockSize, MinCompression, MinMatchLen, Barrier, SmallestLen, HashSizeLog, Amplifier, callback, auxdata);
+  return ((int (__cdecl *)(MemSize, int, int, int, int, int, int, int, CALLBACK_FUNC*, void*)) f)
+                          (BlockSize, MinCompression, ChunkSize, MinMatchLen, Barrier, SmallestLen, HashSizeLog, Amplifier, callback, auxdata);
 }
 
 #ifndef FREEARC_DECOMPRESS_ONLY
 
-// Функция упаковки
+// Р¤СѓРЅРєС†РёСЏ СѓРїР°РєРѕРІРєРё
 int REP_METHOD::compress (CALLBACK_FUNC *callback, void *auxdata)
 {
   // Use faster function from DLL if possible
   static FARPROC f = LoadFromDLL ("rep_compress");
   if (!f) f = (FARPROC) rep_compress;
 
-  return ((int (__cdecl *)(MemSize, int, int, int, int, int, int, CALLBACK_FUNC*, void*)) f)
-                          (BlockSize, MinCompression, MinMatchLen, Barrier, SmallestLen, HashSizeLog, Amplifier, callback, auxdata);
+  return ((int (__cdecl *)(MemSize, int, int, int, int, int, int, int, CALLBACK_FUNC*, void*)) f)
+                          (BlockSize, MinCompression, ChunkSize, MinMatchLen, Barrier, SmallestLen, HashSizeLog, Amplifier, callback, auxdata);
 }
 
-// Записать в buf[MAX_METHOD_STRLEN] строку, описывающую метод сжатия и его параметры (функция, обратная к parse_REP)
-void REP_METHOD::ShowCompressionMethod (char *buf)
-{
-  REP_METHOD defaults; char BlockSizeStr[100], MinCompressionStr[100], BarrierTempStr[100], BarrierStr[100], SmallestLenStr[100], HashSizeLogStr[100], AmplifierStr[100], MinMatchLenStr[100];
-  showMem (BlockSize, BlockSizeStr);
-  showMem (Barrier,   BarrierTempStr);
-  sprintf (MinCompressionStr, MinCompression!=defaults.MinCompression? ":%d%%" : "", MinCompression);
-  sprintf (BarrierStr,     Barrier    !=defaults.Barrier    ? ":d%s" : "", BarrierTempStr);
-  sprintf (SmallestLenStr, SmallestLen!=defaults.SmallestLen? ":s%d" : "", SmallestLen);
-  sprintf (AmplifierStr,   Amplifier  !=defaults.Amplifier  ? ":a%d" : "", Amplifier);
-  sprintf (HashSizeLogStr, HashSizeLog!=defaults.HashSizeLog? ":h%d" : "", HashSizeLog);
-  sprintf (MinMatchLenStr, MinMatchLen!=defaults.MinMatchLen? ":%d"  : "", MinMatchLen);
-  sprintf (buf, "rep:%s%s%s%s%s%s%s", BlockSizeStr, MinCompressionStr, MinMatchLenStr, BarrierStr, SmallestLenStr, HashSizeLogStr, AmplifierStr);
-}
-
-// Посчитать, сколько памяти требуется для упаковки заданным методом
+// РџРѕСЃС‡РёС‚Р°С‚СЊ, СЃРєРѕР»СЊРєРѕ РїР°РјСЏС‚Рё С‚СЂРµР±СѓРµС‚СЃСЏ РґР»СЏ СѓРїР°РєРѕРІРєРё Р·Р°РґР°РЅРЅС‹Рј РјРµС‚РѕРґРѕРј
 MemSize REP_METHOD::GetCompressionMem (void)
 {
-  // Скопировано из rep_compress
-  int L = roundup_to_power_of (mymin(SmallestLen,MinMatchLen)/2, 2);  // Размер блоков, КС которых заносится в хеш
-  int k = sqrtb(L*2);
-  int HashSize = CalcHashSize (HashSizeLog, BlockSize, k);
-
+  int L;   // Р Р°Р·РјРµСЂ Р±Р»РѕРєРѕРІ, РљРЎ РєРѕС‚РѕСЂС‹С… Р·Р°РЅРѕСЃРёС‚СЃСЏ РІ С…РµС€
+  int HashSize = CalcHashSize (HashSizeLog, BlockSize, SmallestLen, MinMatchLen, ChunkSize, Amplifier, &L);
   return BlockSize + HashSize*sizeof(int);
 }
 
-// Посчитать, сколько памяти требуется для упаковки заданным методом
+// Modifies compression method to use specified amount of memory
 void REP_METHOD::SetCompressionMem (MemSize mem)
 {
   if (mem>0)
   {
-    // Скопировано из rep_compress
-    int L = roundup_to_power_of (mymin(SmallestLen,MinMatchLen)/2, 2);  // Размер блоков, КС которых заносится в хеш
-    int k = sqrtb(L*2);
-    int HashSize = CalcHashSize (HashSizeLog, mem/5*4, k);
-
+    int L;   // Р Р°Р·РјРµСЂ Р±Р»РѕРєРѕРІ, РљРЎ РєРѕС‚РѕСЂС‹С… Р·Р°РЅРѕСЃРёС‚СЃСЏ РІ С…РµС€
+    int HashSize = CalcHashSize (HashSizeLog, mem/5*4, SmallestLen, MinMatchLen, ChunkSize, Amplifier, &L);
     BlockSize = mem - HashSize*sizeof(int);
   }
 }
 
 #endif  // !defined (FREEARC_DECOMPRESS_ONLY)
 
-// Конструирует объект типа REP_METHOD с заданными параметрами упаковки
-// или возвращает NULL, если это другой метод сжатия или допущена ошибка в параметрах
+
+// Р—Р°РїРёСЃР°С‚СЊ РІ buf[MAX_METHOD_STRLEN] СЃС‚СЂРѕРєСѓ, РѕРїРёСЃС‹РІР°СЋС‰СѓСЋ РјРµС‚РѕРґ СЃР¶Р°С‚РёСЏ Рё РµРіРѕ РїР°СЂР°РјРµС‚СЂС‹ (С„СѓРЅРєС†РёСЏ, РѕР±СЂР°С‚РЅР°СЏ Рє parse_REP)
+void REP_METHOD::ShowCompressionMethod (char *buf, bool purify)
+{
+  REP_METHOD defaults; char BlockSizeStr[100], MinCompressionStr[100], BarrierTempStr[100], BarrierStr[100], SmallestLenStr[100], HashSizeLogStr[100], AmplifierStr[100], ChunkSizeStr[100], MinMatchLenStr[100];
+  showMem (BlockSize, BlockSizeStr);
+  showMem (Barrier,   BarrierTempStr);
+  sprintf (MinCompressionStr, MinCompression!=defaults.MinCompression? ":%d%%" : "", MinCompression);
+  sprintf (MinMatchLenStr, MinMatchLen!=defaults.MinMatchLen? ":%d"  : "", MinMatchLen);
+  sprintf (ChunkSizeStr,   ChunkSize  !=defaults.ChunkSize  ? ":c%d" : "", ChunkSize);
+  sprintf (BarrierStr,     Barrier    !=defaults.Barrier    ? ":d%s" : "", BarrierTempStr);
+  sprintf (SmallestLenStr, SmallestLen!=defaults.SmallestLen? ":s%d" : "", SmallestLen);
+  sprintf (AmplifierStr,   Amplifier  !=defaults.Amplifier  ? ":a%d" : "", Amplifier);
+  sprintf (HashSizeLogStr, HashSizeLog!=defaults.HashSizeLog? ":h%d" : "", HashSizeLog);
+  sprintf (buf, "rep:%s%s%s%s%s%s%s%s", BlockSizeStr, MinCompressionStr, MinMatchLenStr, purify? "":ChunkSizeStr, BarrierStr, SmallestLenStr, HashSizeLogStr, AmplifierStr);
+}
+
+// РљРѕРЅСЃС‚СЂСѓРёСЂСѓРµС‚ РѕР±СЉРµРєС‚ С‚РёРїР° REP_METHOD СЃ Р·Р°РґР°РЅРЅС‹РјРё РїР°СЂР°РјРµС‚СЂР°РјРё СѓРїР°РєРѕРІРєРё
+// РёР»Рё РІРѕР·РІСЂР°С‰Р°РµС‚ NULL, РµСЃР»Рё СЌС‚Рѕ РґСЂСѓРіРѕР№ РјРµС‚РѕРґ СЃР¶Р°С‚РёСЏ РёР»Рё РґРѕРїСѓС‰РµРЅР° РѕС€РёР±РєР° РІ РїР°СЂР°РјРµС‚СЂР°С…
 COMPRESSION_METHOD* parse_REP (char** parameters)
 {
   if (strcmp (parameters[0], "rep") == 0) {
-    // Если название метода (нулевой параметр) - "rep", то разберём остальные параметры
+    // Р•СЃР»Рё РЅР°Р·РІР°РЅРёРµ РјРµС‚РѕРґР° (РЅСѓР»РµРІРѕР№ РїР°СЂР°РјРµС‚СЂ) - "rep", С‚Рѕ СЂР°Р·Р±РµСЂС‘Рј РѕСЃС‚Р°Р»СЊРЅС‹Рµ РїР°СЂР°РјРµС‚СЂС‹
 
     REP_METHOD *p = new REP_METHOD;
-    int error = 0;  // Признак того, что при разборе параметров произошла ошибка
+    int error = 0;  // РџСЂРёР·РЅР°Рє С‚РѕРіРѕ, С‡С‚Рѕ РїСЂРё СЂР°Р·Р±РѕСЂРµ РїР°СЂР°РјРµС‚СЂРѕРІ РїСЂРѕРёР·РѕС€Р»Р° РѕС€РёР±РєР°
 
-    // Переберём все параметры метода (или выйдем раньше при возникновении ошибки при разборе очередного параметра)
+    // РџРµСЂРµР±РµСЂС‘Рј РІСЃРµ РїР°СЂР°РјРµС‚СЂС‹ РјРµС‚РѕРґР° (РёР»Рё РІС‹Р№РґРµРј СЂР°РЅСЊС€Рµ РїСЂРё РІРѕР·РЅРёРєРЅРѕРІРµРЅРёРё РѕС€РёР±РєРё РїСЂРё СЂР°Р·Р±РѕСЂРµ РѕС‡РµСЂРµРґРЅРѕРіРѕ РїР°СЂР°РјРµС‚СЂР°)
     while (*++parameters && !error)
     {
       char* param = *parameters;
-      switch (*param) {                    // Параметры, содержащие значения
+      if (strequ (param, "max"))  {p->Amplifier = 99;  continue;}
+      switch (*param) {                    // РџР°СЂР°РјРµС‚СЂС‹, СЃРѕРґРµСЂР¶Р°С‰РёРµ Р·РЅР°С‡РµРЅРёСЏ
         case 'b':  p->BlockSize   = parseMem (param+1, &error); continue;
         case 'l':  p->MinMatchLen = parseInt (param+1, &error); continue;
+        case 'c':  p->ChunkSize   = parseInt (param+1, &error); continue;
         case 'd':  p->Barrier     = parseMem (param+1, &error); continue;
         case 's':  p->SmallestLen = parseInt (param+1, &error); continue;
         case 'h':  p->HashSizeLog = parseInt (param+1, &error); continue;
         case 'a':  p->Amplifier   = parseInt (param+1, &error); continue;
       }
-      // Если параметр заканчивается знаком процента. то попробуем распарсить его как "N%"
+      // Р•СЃР»Рё РїР°СЂР°РјРµС‚СЂ Р·Р°РєР°РЅС‡РёРІР°РµС‚СЃСЏ Р·РЅР°РєРѕРј РїСЂРѕС†РµРЅС‚Р°. С‚Рѕ РїРѕРїСЂРѕР±СѓРµРј СЂР°СЃРїР°СЂСЃРёС‚СЊ РµРіРѕ РєР°Рє "N%"
       if (last_char(param) == '%') {
         char str[100]; strcpy(str,param); last_char(str) = '\0';
         int n = parseInt (str, &error);
         if (!error) { p->MinCompression = n; continue; }
         error=0;
       }
-      // Сюда мы попадаем, если в параметре не указано его название
-      // Если этот параметр удастся разобрать как целое число (т.е. в нём - только цифры),
-      // то присвоим его значение полю MinMatchLen, иначе попробуем разобрать его как BlockSize
+      // РЎСЋРґР° РјС‹ РїРѕРїР°РґР°РµРј, РµСЃР»Рё РІ РїР°СЂР°РјРµС‚СЂРµ РЅРµ СѓРєР°Р·Р°РЅРѕ РµРіРѕ РЅР°Р·РІР°РЅРёРµ
+      // Р•СЃР»Рё СЌС‚РѕС‚ РїР°СЂР°РјРµС‚СЂ СѓРґР°СЃС‚СЃСЏ СЂР°Р·РѕР±СЂР°С‚СЊ РєР°Рє С†РµР»РѕРµ С‡РёСЃР»Рѕ (С‚.Рµ. РІ РЅС‘Рј - С‚РѕР»СЊРєРѕ С†РёС„СЂС‹),
+      // С‚Рѕ РїСЂРёСЃРІРѕРёРј РµРіРѕ Р·РЅР°С‡РµРЅРёРµ РїРѕР»СЋ MinMatchLen, РёРЅР°С‡Рµ РїРѕРїСЂРѕР±СѓРµРј СЂР°Р·РѕР±СЂР°С‚СЊ РµРіРѕ РєР°Рє BlockSize
       int n = parseInt (param, &error);
       if (!error) p->MinMatchLen = n;
       else        error=0, p->BlockSize = parseMem (param, &error);
     }
-    if (error)  {delete p; return NULL;}  // Ошибка при парсинге параметров метода
+    if (error)  {delete p; return NULL;}  // РћС€РёР±РєР° РїСЂРё РїР°СЂСЃРёРЅРіРµ РїР°СЂР°РјРµС‚СЂРѕРІ РјРµС‚РѕРґР°
     return p;
   } else
-    return NULL;   // Это не метод REP
+    return NULL;   // Р­С‚Рѕ РЅРµ РјРµС‚РѕРґ REP
 }
 
-static int REP_x = AddCompressionMethod (parse_REP);   // Зарегистрируем парсер метода REP
+static int REP_x = AddCompressionMethod (parse_REP);   // Р—Р°СЂРµРіРёСЃС‚СЂРёСЂСѓРµРј РїР°СЂСЃРµСЂ РјРµС‚РѕРґР° REP

@@ -1,61 +1,61 @@
 #include "../Compression.h"
 #include "libGRZip.h"
 
-int __cdecl grzip_compress   (int Method,
-                      int BlockSize,
-                      int EnableLZP,
-                      int MinMatchLen,
-                      int HashSizeLog,
-                      int AlternativeBWTSort,
-                      int AdaptiveBlockSize,
-                      int DeltaFilter,
-                      CALLBACK_FUNC *callback,
-                      void *auxdata);
-
-int __cdecl grzip_decompress (CALLBACK_FUNC *callback,
-                      void *auxdata);
+sint32 __cdecl GRZip_CompressBlock        (uint8* Input, sint32 Size, uint8* Output, sint32 Mode);
+sint32 __cdecl GRZip_DecompressBlock      (uint8* Input, sint32 Size, uint8* Output);
+sint32 __cdecl GRZip_GetAdaptiveBlockSize (uint8* Input, sint32 Size);
 
 
 #ifdef __cplusplus
 
-// Реализация стандартного интерфейса методов сжатия COMPRESSION_METHOD
+// Р РµР°Р»РёР·Р°С†РёСЏ СЃС‚Р°РЅРґР°СЂС‚РЅРѕРіРѕ РёРЅС‚РµСЂС„РµР№СЃР° РјРµС‚РѕРґРѕРІ СЃР¶Р°С‚РёСЏ COMPRESSION_METHOD
 class GRZIP_METHOD : public COMPRESSION_METHOD
 {
 public:
-  // Параметры этого метода сжатия
-  MemSize BlockSize;        // Размер блока данных, обрабатываемых совместно
-  int     Method;
+  // РџР°СЂР°РјРµС‚СЂС‹ СЌС‚РѕРіРѕ РјРµС‚РѕРґР° СЃР¶Р°С‚РёСЏ
+  MemSize BlockSize;                        // Р Р°Р·РјРµСЂ Р±Р»РѕРєР° РґР°РЅРЅС‹С…, РѕР±СЂР°Р±Р°С‚С‹РІР°РµРјС‹С… СЃРѕРІРјРµСЃС‚РЅРѕ
+  int     Method;                           // РџР°СЂР°РјРµС‚СЂС‹ Р°Р»РіРѕСЂРёС‚РјР° GRZip
   int     EnableLZP;
   int     MinMatchLen;
   int     HashSizeLog;
   int     AlternativeBWTSort;
   int     AdaptiveBlockSize;
   int     DeltaFilter;
+  int     NumThreads;                       // Number of compression threads
+  int     NumExtraBuffers;                  // Number of additional compression buffers used to optimize I/O
 
-  // Конструктор, присваивающий параметрам метода сжатия значения по умолчанию
+  // РљРѕРЅСЃС‚СЂСѓРєС‚РѕСЂ, РїСЂРёСЃРІР°РёРІР°СЋС‰РёР№ РїР°СЂР°РјРµС‚СЂР°Рј РјРµС‚РѕРґР° СЃР¶Р°С‚РёСЏ Р·РЅР°С‡РµРЅРёСЏ РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ
   GRZIP_METHOD();
+  int GetNumThreads()       {return NumThreads>0? NumThreads : GetCompressionThreads();}   // Number of (de)compression threads
+  int GetNumExtraBuffers()  {return NumExtraBuffers>=0? NumExtraBuffers : 2;}              // Number of additional compression buffer pairs used for background I/O
 
-  // Функции распаковки и упаковки
+  // РЈРЅРёРІРµСЂСЃР°Р»СЊРЅС‹Р№ РјРµС‚РѕРґ, РѕС‚РІРµС‡Р°РµС‚ РЅР° Р·Р°РїСЂРѕСЃ "has_progress?"
+  virtual int doit (char *what, int param, void *data, CALLBACK_FUNC *callback);
+  // Р¤СѓРЅРєС†РёРё СЂР°СЃРїР°РєРѕРІРєРё Рё СѓРїР°РєРѕРІРєРё
   virtual int decompress (CALLBACK_FUNC *callback, void *auxdata);
 #ifndef FREEARC_DECOMPRESS_ONLY
   virtual int compress   (CALLBACK_FUNC *callback, void *auxdata);
 
-  // Записать в buf[MAX_METHOD_STRLEN] строку, описывающую метод сжатия и его параметры (функция, обратная к parse_GRZIP)
-  virtual void ShowCompressionMethod (char *buf);
-
-  // Получить/установить объём памяти, используемой при упаковке/распаковке, размер словаря или размер блока
-  virtual MemSize GetCompressionMem     (void)         {return BlockSize*9*GetCompressionThreads();}
-  virtual MemSize GetDictionary         (void)         {return BlockSize;}
-  virtual MemSize GetBlockSize          (void)         {return BlockSize;}
-  virtual void    SetCompressionMem     (MemSize mem)  {SetBlockSize (mem/9/GetCompressionThreads());}
-  virtual void    SetDecompressionMem   (MemSize mem)  {SetBlockSize (mem/5/GetCompressionThreads());}
-  virtual void    SetDictionary         (MemSize dict) {SetBlockSize (dict);}
-  virtual void    SetBlockSize          (MemSize bs);
+  // РџРѕР»СѓС‡РёС‚СЊ/СѓСЃС‚Р°РЅРѕРІРёС‚СЊ (РјРёРЅРёРјР°Р»СЊРЅС‹Р№) РѕР±СЉС‘Рј РїР°РјСЏС‚Рё, РёСЃРїРѕР»СЊР·СѓРµРјРѕР№ РїСЂРё СѓРїР°РєРѕРІРєРµ/СЂР°СЃРїР°РєРѕРІРєРµ, СЂР°Р·РјРµСЂ СЃР»РѕРІР°СЂСЏ РёР»Рё СЂР°Р·РјРµСЂ Р±Р»РѕРєР°
+  virtual MemSize GetCompressionMem        (void)               {return GetSetDeCompressionMem (COMPRESS, 0);}
+  virtual MemSize GetMinCompressionMem     (void)               {return GetSetDeCompressionMem (COMPRESS, 0, true);}
+  virtual MemSize GetMinDecompressionMem   (void)               {return GetSetDeCompressionMem (DECOMPRESS, 0, true);}
+  virtual void    SetCompressionMem        (MemSize mem)        {GetSetDeCompressionMem (COMPRESS, mem);}
+  virtual void    SetMinDecompressionMem   (MemSize mem)        {GetSetDeCompressionMem (DECOMPRESS, mem, true);}
+  virtual void    SetDictionary            (MemSize dict)       {SetBlockSize (dict);}
+  virtual void    SetBlockSize             (MemSize bs);
 #endif
-  virtual MemSize GetDecompressionMem   (void)         {return BlockSize*5*GetCompressionThreads();}
+  virtual MemSize GetDictionary            (void)               {return BlockSize;}
+  virtual MemSize GetBlockSize             (void)               {return BlockSize;}
+  virtual MemSize GetDecompressionMem      (void)               {return GetSetDeCompressionMem (DECOMPRESS, 0);}
+  virtual void    SetDecompressionMem      (MemSize mem)        {GetSetDeCompressionMem (DECOMPRESS, mem);}
+          MemSize GetSetDeCompressionMem(COMPRESSION direction, MemSize mem, bool MINMEM = false);  // Get/Set amount of memory used for compression/decompression
+
+  // Р—Р°РїРёСЃР°С‚СЊ РІ buf[MAX_METHOD_STRLEN] СЃС‚СЂРѕРєСѓ, РѕРїРёСЃС‹РІР°СЋС‰СѓСЋ РјРµС‚РѕРґ СЃР¶Р°С‚РёСЏ Рё РµРіРѕ РїР°СЂР°РјРµС‚СЂС‹ (С„СѓРЅРєС†РёСЏ, РѕР±СЂР°С‚РЅР°СЏ Рє parse_GRZIP)
+  virtual void ShowCompressionMethod (char *buf, bool purify);
 };
 
-// Разборщик строки метода сжатия GRZIP
+// Р Р°Р·Р±РѕСЂС‰РёРє СЃС‚СЂРѕРєРё РјРµС‚РѕРґР° СЃР¶Р°С‚РёСЏ GRZIP
 COMPRESSION_METHOD* parse_GRZIP (char** parameters);
 
 #endif  // __cplusplus

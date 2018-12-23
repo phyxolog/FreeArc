@@ -34,7 +34,7 @@ depending on the platform.
 
 module FilePath
     (
-    isWindows, windosifyPath,
+    isWindows, windosifyPath, unixifyPath, make_OS_native_path,
 
     -- * Separator predicates
     FilePath,
@@ -115,11 +115,18 @@ isWindows = False
 -- > pathSeparator ==  '/'
 -- > isPathSeparator pathSeparator
 pathSeparator :: Char
-pathSeparator = '/'
+pathSeparator = head pathSeparators
 
 -- | Make filename valid for Windows functions
 windosifyPath :: FilePath -> FilePath
 windosifyPath = replace '/' '\\'
+
+-- | Make Unix-style filename
+unixifyPath :: FilePath -> FilePath
+unixifyPath = replace '\\' '/'
+
+-- | Make filename valid for this OS
+make_OS_native_path   =   if isWindows   then windosifyPath   else unixifyPath
 
 replace from to  =  map (\x -> if x==from  then to  else x)
 
@@ -302,9 +309,9 @@ isLetter x = (x >= 'a' && x <= 'z') || (x >= 'A' && x <= 'Z')
 -- > Windows: splitDrive "file" == ("","file")
 -- > Windows: splitDrive "c:/file" == ("c:/","file")
 -- > Windows: splitDrive "c:\\file" == ("c:\\","file")
--- > Windows: splitDrive "\\\\shared\\test" == ("\\\\shared\\","test")
--- > Windows: splitDrive "\\\\shared" == ("\\\\shared","")
--- > Windows: splitDrive "\\\\?\\UNC\\shared\\file" == ("\\\\?\\UNC\\shared\\","file")
+-- > Windows: splitDrive "\\\\server\\share\\test" == ("\\\\server\\share\\","test")
+-- > Windows: splitDrive "\\\\server\\share" == ("\\\\server\\share","")
+-- > Windows: splitDrive "\\\\?\\UNC\\server\\share\\file" == ("\\\\?\\UNC\\server\\share\\","file")
 -- > Windows: splitDrive "\\\\?\\d:\\file" == ("\\\\?\\d:\\","file")
 -- > Windows: splitDrive "/d" == ("/","d")
 -- > Posix:   splitDrive "/test" == ("/","test")
@@ -323,16 +330,16 @@ splitDrive x | isJust y = fromJust y
 splitDrive x | isJust y = fromJust y
     where y = readDriveShare x
 
-splitDrive (x:xs) | isPathSeparator x = addSlash [x] xs
+splitDrive (x:xs) | isPathSeparator x = addSlash ([x], xs)
 
 splitDrive x = ("",x)
 
-addSlash :: FilePath -> FilePath -> (FilePath, FilePath)
-addSlash a xs = (a++c,d)
+addSlash :: (FilePath, FilePath) -> (FilePath, FilePath)
+addSlash (a,xs) = (a++c,d)
     where (c,d) = span isPathSeparator xs
 
 -- http://msdn.microsoft.com/library/default.asp?url=/library/en-us/fileio/fs/naming_a_file.asp
--- "\\?\D:\<path>" or "\\?\UNC\<server>\<share>"
+-- "\\?\D:\<path>" or "\\?\UNC\<server>\<share>\<path>"
 -- a is "\\?\"
 readDriveUNC :: FilePath -> Maybe (FilePath, FilePath)
 readDriveUNC (s1:s2:'?':s3:xs) | all isPathSeparator [s1,s2,s3] =
@@ -347,11 +354,14 @@ readDriveUNC _ = Nothing
 
 {- c:\ -}
 readDriveLetter :: String -> Maybe (FilePath, FilePath)
-readDriveLetter (x:':':y:xs) | isLetter x && isPathSeparator y = Just $ addSlash [x,':'] (y:xs)
+readDriveLetter (x:':':y:xs) | isLetter x && isPathSeparator y = Just $ addSlash (x:":", y:xs)
 readDriveLetter (x:':':xs) | isLetter x = Just ([x,':'], xs)
 readDriveLetter _ = Nothing
 
-{- \\sharename\ -}
+-- \\.\I:\file   \\.\COM1
+-- \\.\I: \\.\PhysicalDrive3 - entire drive in 7-zip
+
+{- \\server\\share\ -}
 readDriveShare :: String -> Maybe (FilePath, FilePath)
 readDriveShare (s1:s2:xs) | isPathSeparator s1 && isPathSeparator s2 =
         Just (s1:s2:a,b)
@@ -359,10 +369,11 @@ readDriveShare (s1:s2:xs) | isPathSeparator s1 && isPathSeparator s2 =
 readDriveShare _ = Nothing
 
 {- assume you have already seen \\ -}
-{- share\bob -> "share","\","bob" -}
+{- server\share\bob -> "server\share","\","bob" -}
 readDriveShareName :: String -> (FilePath, FilePath)
-readDriveShareName name = addSlash a b
-    where (a,b) = break isPathSeparator name
+readDriveShareName name = (a++c,d)
+    where (a,b) = addSlash $ break isPathSeparator name
+          (c,d) = addSlash $ break isPathSeparator b
 
 
 

@@ -1,67 +1,65 @@
 #include "../Compression.h"
 
-int external_compress   (char *packcmd, char *unpackcmd, char *datafile, char *packedfile, CALLBACK_FUNC *callback, void *auxdata);
-int external_decompress (char *packcmd, char *unpackcmd, char *datafile, char *packedfile, CALLBACK_FUNC *callback, void *auxdata);
-
-// Добавить в таблицу методов сжатия описанный пользователем в arc.ini внешний упаковщик.
-// params содержит описание упаковщика из arc.ini. Возвращает 1, если описание корректно.
+// Р”РѕР±Р°РІРёС‚СЊ РІ С‚Р°Р±Р»РёС†Сѓ РјРµС‚РѕРґРѕРІ СЃР¶Р°С‚РёСЏ РѕРїРёСЃР°РЅРЅС‹Р№ РїРѕР»СЊР·РѕРІР°С‚РµР»РµРј РІ arc.ini РІРЅРµС€РЅРёР№ СѓРїР°РєРѕРІС‰РёРє.
+// params СЃРѕРґРµСЂР¶РёС‚ РѕРїРёСЃР°РЅРёРµ СѓРїР°РєРѕРІС‰РёРєР° РёР· arc.ini. Р’РѕР·РІСЂР°С‰Р°РµС‚ 1, РµСЃР»Рё РѕРїРёСЃР°РЅРёРµ РєРѕСЂСЂРµРєС‚РЅРѕ.
 int AddExternalCompressor (char *params);
+
+// РЎРёРЅС…СЂРѕРЅРёР·Р°С†РёСЏ РґРѕСЃС‚СѓРїР° Рє РєРѕРЅСЃРѕР»Рё
+void SynchronizeConio_Enter (void);
+void SynchronizeConio_Leave (void);
+
 
 #ifdef __cplusplus
 
-// Реализация стандартного интерфейса методов сжатия COMPRESSION_METHOD
+// Р РµР°Р»РёР·Р°С†РёСЏ СЃС‚Р°РЅРґР°СЂС‚РЅРѕРіРѕ РёРЅС‚РµСЂС„РµР№СЃР° РјРµС‚РѕРґРѕРІ СЃР¶Р°С‚РёСЏ COMPRESSION_METHOD
 class EXTERNAL_METHOD : public COMPRESSION_METHOD
 {
 public:
-  // Параметры этого метода сжатия
-  char    *name;            // Имя метода (pmm, ccm...)
-  bool     can_set_mem;     // Доступно изменение требований к памяти?
-  MemSize  cmem;            // Объём памяти, используемой для сжатия
-  MemSize  dmem;            // Объём памяти, используемой для распаковки
-  char    *datafile;        // Наименование файла с неупакованными данными
-  char    *packedfile;      // Наименование файла с упакованными данными
-  char    *packcmd;         // Команда упаковки данных (datafile -> packedfile)
-  char    *unpackcmd;       // Команда распаковки данных (packedfile -> datafile)
-  char    *options[MAX_PARAMETERS];             // Доп. параметры метода
-  char     option_strings[MAX_METHOD_STRLEN];   // Текстовый буфер для хранения текста параметров
-  char    *defaultopt;      // Значения параметров по умолчанию
-  int      solid;           // Разрешено делать солид-блоки?
+  // РџР°СЂР°РјРµС‚СЂС‹ СЌС‚РѕРіРѕ РјРµС‚РѕРґР° СЃР¶Р°С‚РёСЏ
+  char    *name;            // РРјСЏ РјРµС‚РѕРґР° (pmm, ccm...)
+  bool     can_set_mem;     // Р”РѕСЃС‚СѓРїРЅРѕ РёР·РјРµРЅРµРЅРёРµ С‚СЂРµР±РѕРІР°РЅРёР№ Рє РїР°РјСЏС‚Рё?
+  MemSize  cmem;            // РћР±СЉС‘Рј РїР°РјСЏС‚Рё, РёСЃРїРѕР»СЊР·СѓРµРјРѕР№ РґР»СЏ СЃР¶Р°С‚РёСЏ
+  MemSize  dmem;            // РћР±СЉС‘Рј РїР°РјСЏС‚Рё, РёСЃРїРѕР»СЊР·СѓРµРјРѕР№ РґР»СЏ СЂР°СЃРїР°РєРѕРІРєРё
+  char    *datafile;        // РќР°РёРјРµРЅРѕРІР°РЅРёРµ С„Р°Р№Р»Р° СЃ РЅРµСѓРїР°РєРѕРІР°РЅРЅС‹РјРё РґР°РЅРЅС‹РјРё
+  char    *packedfile;      // РќР°РёРјРµРЅРѕРІР°РЅРёРµ С„Р°Р№Р»Р° СЃ СѓРїР°РєРѕРІР°РЅРЅС‹РјРё РґР°РЅРЅС‹РјРё
+  char    *packcmd;         // РљРѕРјР°РЅРґР° СѓРїР°РєРѕРІРєРё РґР°РЅРЅС‹С… (datafile -> packedfile)
+  char    *unpackcmd;       // РљРѕРјР°РЅРґР° СЂР°СЃРїР°РєРѕРІРєРё РґР°РЅРЅС‹С… (packedfile -> datafile)
+  char    *options[MAX_PARAMETERS];             // Р”РѕРї. РїР°СЂР°РјРµС‚СЂС‹ РјРµС‚РѕРґР°
+  char     option_strings[MAX_METHOD_STRLEN];   // РўРµРєСЃС‚РѕРІС‹Р№ Р±СѓС„РµСЂ РґР»СЏ С…СЂР°РЅРµРЅРёСЏ С‚РµРєСЃС‚Р° РїР°СЂР°РјРµС‚СЂРѕРІ
+  char    *defaultopt;      // Р—РЅР°С‡РµРЅРёСЏ РїР°СЂР°РјРµС‚СЂРѕРІ РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ
+  int      solid;           // Р Р°Р·СЂРµС€РµРЅРѕ РґРµР»Р°С‚СЊ СЃРѕР»РёРґ-Р±Р»РѕРєРё?
+  int      useHeader;       // TRUE, РµСЃР»Рё РІ РЅР°С‡Р°Р»Рѕ СЃР¶Р°С‚РѕРіРѕ РїРѕС‚РѕРєР° Р·Р°РїРёСЃС‹РІР°РµС‚СЃСЏ 0/1 - РґР°РЅРЅС‹Рµ РЅРµСЃР¶Р°С‚С‹/СЃР¶Р°С‚С‹; FALSE - РїСЂРё РїРѕРґРјРµРЅРµ РІРЅСѓС‚СЂРµРЅРЅРёС… РјРµС‚РѕРґРѕРІ
 
-  // Параметры, специфичные для PPMonstr
-  int     order;            // Порядок модели (по скольким последним сивмолам предсказывается следующий)
-  int     MRMethod;         // Что делать, когда память, выделенная для хранения модели, исчерпана
-  int     MinCompression;   // Минимальный процент сжатия. Если выходные данные больше, то вместо них будут записаны оригинальные (несжатые) данные
+  // РџР°СЂР°РјРµС‚СЂС‹, СЃРїРµС†РёС„РёС‡РЅС‹Рµ РґР»СЏ PPMonstr
+  int     order;            // РџРѕСЂСЏРґРѕРє РјРѕРґРµР»Рё (РїРѕ СЃРєРѕР»СЊРєРёРј РїРѕСЃР»РµРґРЅРёРј СЃРёРІРјРѕР»Р°Рј РїСЂРµРґСЃРєР°Р·С‹РІР°РµС‚СЃСЏ СЃР»РµРґСѓСЋС‰РёР№)
+  int     MRMethod;         // Р§С‚Рѕ РґРµР»Р°С‚СЊ, РєРѕРіРґР° РїР°РјСЏС‚СЊ, РІС‹РґРµР»РµРЅРЅР°СЏ РґР»СЏ С…СЂР°РЅРµРЅРёСЏ РјРѕРґРµР»Рё, РёСЃС‡РµСЂРїР°РЅР°
+  int     MinCompression;   // РњРёРЅРёРјР°Р»СЊРЅС‹Р№ РїСЂРѕС†РµРЅС‚ СЃР¶Р°С‚РёСЏ. Р•СЃР»Рё РІС‹С…РѕРґРЅС‹Рµ РґР°РЅРЅС‹Рµ Р±РѕР»СЊС€Рµ, С‚Рѕ РІРјРµСЃС‚Рѕ РЅРёС… Р±СѓРґСѓС‚ Р·Р°РїРёСЃР°РЅС‹ РѕСЂРёРіРёРЅР°Р»СЊРЅС‹Рµ (РЅРµСЃР¶Р°С‚С‹Рµ) РґР°РЅРЅС‹Рµ
 
   EXTERNAL_METHOD() {};
-  // Универсальный метод: возвращаем различные простые характеристики метода сжатия
-  virtual int doit (char *what, int param, void *data, CALLBACK_FUNC *callback)
-  {
-      if      (strequ (what,"external?"))  return 1;
-      else if (strequ (what,"nosolid?"))   return !solid;
-      else return COMPRESSION_METHOD::doit (what, param, data, callback);
-  }
 
-  // Функции распаковки и упаковки
-  virtual int decompress (CALLBACK_FUNC *callback, void *auxdata);
+  // РЈРЅРёРІРµСЂСЃР°Р»СЊРЅС‹Р№ РјРµС‚РѕРґ: РІРѕР·РІСЂР°С‰Р°РµРј СЂР°Р·Р»РёС‡РЅС‹Рµ РїСЂРѕСЃС‚С‹Рµ С…Р°СЂР°РєС‚РµСЂРёСЃС‚РёРєРё РјРµС‚РѕРґР° СЃР¶Р°С‚РёСЏ
+  virtual int doit (char *what, int param, void *data, CALLBACK_FUNC *callback);
+
+  // РЈРїР°РєРѕРІРєР°/СЂР°СЃРїР°РєРѕРІРєР°
+  int DeCompress (COMPRESSION direction, CALLBACK_FUNC *callback, void *auxdata);
+
+  // Р¤СѓРЅРєС†РёРё СЂР°СЃРїР°РєРѕРІРєРё Рё СѓРїР°РєРѕРІРєРё
+  virtual int decompress (CALLBACK_FUNC *callback, void *auxdata)     {return DeCompress (DECOMPRESS, callback, auxdata);}
 #ifndef FREEARC_DECOMPRESS_ONLY
-  virtual int compress   (CALLBACK_FUNC *callback, void *auxdata);
+  virtual int compress   (CALLBACK_FUNC *callback, void *auxdata)     {return DeCompress (COMPRESS, callback, auxdata);}
 
-  // Записать в buf[MAX_METHOD_STRLEN] строку, описывающую метод сжатия и его параметры (функция, обратная к parse_EXTERNAL)
-  virtual void ShowCompressionMethod (char *buf);
-
-  // Получить/установить объём памяти, используемой при упаковке/распаковке, размер словаря или размер блока
-  virtual MemSize GetCompressionMem     (void)          {return cmem;}
-  virtual MemSize GetDictionary         (void)          {return 0;}
-  virtual MemSize GetBlockSize          (void)          {return 0;}
-  virtual void    SetCompressionMem     (MemSize _mem);
-  virtual void    SetDecompressionMem   (MemSize _mem)  {SetCompressionMem(_mem);}
-  virtual void    SetDictionary         (MemSize dict)  {}
-  virtual void    SetBlockSize          (MemSize bs)    {}
+  // РџРѕР»СѓС‡РёС‚СЊ/СѓСЃС‚Р°РЅРѕРІРёС‚СЊ РѕР±СЉС‘Рј РїР°РјСЏС‚Рё, РёСЃРїРѕР»СЊР·СѓРµРјРѕР№ РїСЂРё СѓРїР°РєРѕРІРєРµ/СЂР°СЃРїР°РєРѕРІРєРµ, СЂР°Р·РјРµСЂ СЃР»РѕРІР°СЂСЏ РёР»Рё СЂР°Р·РјРµСЂ Р±Р»РѕРєР°
+  virtual MemSize GetCompressionMem        (void)               {return cmem;}
+  virtual void    SetCompressionMem        (MemSize _mem);
+  virtual void    SetMinDecompressionMem   (MemSize _mem)       {SetCompressionMem(_mem);}
 #endif
-  virtual MemSize GetDecompressionMem   (void)          {return dmem;}
+  virtual MemSize GetDecompressionMem      (void)               {return dmem;}
+
+  // Р—Р°РїРёСЃР°С‚СЊ РІ buf[MAX_METHOD_STRLEN] СЃС‚СЂРѕРєСѓ, РѕРїРёСЃС‹РІР°СЋС‰СѓСЋ РјРµС‚РѕРґ СЃР¶Р°С‚РёСЏ Рё РµРіРѕ РїР°СЂР°РјРµС‚СЂС‹ (С„СѓРЅРєС†РёСЏ, РѕР±СЂР°С‚РЅР°СЏ Рє parse_EXTERNAL)
+  virtual void ShowCompressionMethod (char *buf, bool purify);
 };
 
-// Разборщик строки препроцессора EXTERNAL
+// Р Р°Р·Р±РѕСЂС‰РёРє СЃС‚СЂРѕРєРё РїСЂРµРїСЂРѕС†РµСЃСЃРѕСЂР° EXTERNAL
 COMPRESSION_METHOD* parse_EXTERNAL (char** parameters);
 
 #endif  // __cplusplus

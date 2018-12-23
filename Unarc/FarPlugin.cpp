@@ -7,8 +7,8 @@
   Copyrigth (c) 2000-2002 FAR group
   Copyleft  (l) 2005-2008 Bulat Ziganshin
 
-  TO DO: время летних/зимних файлов сдвигается на час
-         join_name - проверять, что мы не выходим за пределы буфера
+  TO DO: РІСЂРµРјСЏ Р»РµС‚РЅРёС…/Р·РёРјРЅРёС… С„Р°Р№Р»РѕРІ СЃРґРІРёРіР°РµС‚СЃСЏ РЅР° С‡Р°СЃ
+         join_name - РїСЂРѕРІРµСЂСЏС‚СЊ, С‡С‚Рѕ РјС‹ РЅРµ РІС‹С…РѕРґРёРј Р·Р° РїСЂРµРґРµР»С‹ Р±СѓС„РµСЂР°
 */
 /* Revision: 22.06.2008 $ */
 
@@ -25,14 +25,14 @@
 #include "plugin.hpp"
 #include "fmt.hpp"
 
-// Для обработки ошибок во вложенных процедурах - longjmp сигнализирует процедуре верхнего уровня о произошедшей ошибке
+// Р”Р»СЏ РѕР±СЂР°Р±РѕС‚РєРё РѕС€РёР±РѕРє РІРѕ РІР»РѕР¶РµРЅРЅС‹С… РїСЂРѕС†РµРґСѓСЂР°С… - longjmp СЃРёРіРЅР°Р»РёР·РёСЂСѓРµС‚ РїСЂРѕС†РµРґСѓСЂРµ РІРµСЂС…РЅРµРіРѕ СѓСЂРѕРІРЅСЏ Рѕ РїСЂРѕРёР·РѕС€РµРґС€РµР№ РѕС€РёР±РєРµ
 static jmp_buf jumper;
-#define CHECK(a,b)               {if(!(a)) longjmp(jumper,1);}
+#define CHECK(e,a,b)             {if(!(a)) longjmp(jumper,1);}
 #define FreeAndNil(ptr)          {delete (ptr); (ptr)=NULL;}
 #include "ArcStructure.h"
 
 /***********************************************************************
- *** Основная программа ************************************************
+ *** РћСЃРЅРѕРІРЅР°СЏ РїСЂРѕРіСЂР°РјРјР° ************************************************
  ***********************************************************************
 */
 
@@ -56,12 +56,12 @@ void cleanup()
 
 BOOL WINAPI _export IsArchive(const char *Name,const unsigned char *Data,int DataSize)
 {
-  // Найти в буфере сигнатуру, а после неё - версию архиватора
+  // РќР°Р№С‚Рё РІ Р±СѓС„РµСЂРµ СЃРёРіРЅР°С‚СѓСЂСѓ, Р° РїРѕСЃР»Рµ РЅРµС‘ - РІРµСЂСЃРёСЋ Р°СЂС…РёРІР°С‚РѕСЂР°
   for( int I=0; I <= (int)(DataSize-20); I++ )
   {
     if (*(uint32*)(Data+I) == aSIGNATURE)
     {
-      UnpVer=(Data[I+4]*10+Data[I+5])*256 + Data[I+6]*10+Data[I+7];  // Версия программы, требуемая для распаковки архива
+      UnpVer=(Data[I+4]*10+Data[I+5])*256 + Data[I+6]*10+Data[I+7];  // Р’РµСЂСЃРёСЏ РїСЂРѕРіСЂР°РјРјС‹, С‚СЂРµР±СѓРµРјР°СЏ РґР»СЏ СЂР°СЃРїР°РєРѕРІРєРё Р°СЂС…РёРІР°
       SFXSize = I;
       return TRUE;
     }
@@ -72,18 +72,18 @@ BOOL WINAPI _export IsArchive(const char *Name,const unsigned char *Data,int Dat
 BOOL WINAPI _export OpenArchive(const char *Name,int *Type)
 {
   if (setjmp(jumper) != 0)
-    {cleanup(); return FALSE;}  // Сюда мы попадём при возникновении ошибки в одной из вызываемых процедур
+    {cleanup(); return FALSE;}  // РЎСЋРґР° РјС‹ РїРѕРїР°РґС‘Рј РїСЂРё РІРѕР·РЅРёРєРЅРѕРІРµРЅРёРё РѕС€РёР±РєРё РІ РѕРґРЅРѕР№ РёР· РІС‹Р·С‹РІР°РµРјС‹С… РїСЂРѕС†РµРґСѓСЂ
 
   // OEM -> UTF8
   char utf8name[MY_FILENAME_MAX*4];
   oem_to_utf8 (Name, utf8name);
 
-  // Прочитаем структуру архива
+  // РџСЂРѕС‡РёС‚Р°РµРј СЃС‚СЂСѓРєС‚СѓСЂСѓ Р°СЂС…РёРІР°
   arcinfo = new ARCHIVE (FILENAME (utf8name));
-  arcinfo->read_structure();
+  arcinfo->read_structure (NULL, NULL);
   *Type   = 0;
 
-  // Сделаем так, чтобы следующий вызов GetArcItem привёл к чтению первого блока
+  // РЎРґРµР»Р°РµРј С‚Р°Рє, С‡С‚РѕР±С‹ СЃР»РµРґСѓСЋС‰РёР№ РІС‹Р·РѕРІ GetArcItem РїСЂРёРІС‘Р» Рє С‡С‚РµРЅРёСЋ РїРµСЂРІРѕРіРѕ Р±Р»РѕРєР°
   current_block=-1; dirblock=NULL;
   return TRUE;
 }
@@ -91,9 +91,9 @@ BOOL WINAPI _export OpenArchive(const char *Name,int *Type)
 int WINAPI _export GetArcItem(struct PluginPanelItem *Item,struct ArcItemInfo *Info)
 {
   if (setjmp(jumper) != 0)
-    {cleanup(); return GETARC_BROKEN;}  // Сюда мы попадём при возникновении ошибки в одной из вызываемых процедур
+    {cleanup(); return GETARC_BROKEN;}  // РЎСЋРґР° РјС‹ РїРѕРїР°РґС‘Рј РїСЂРё РІРѕР·РЅРёРєРЅРѕРІРµРЅРёРё РѕС€РёР±РєРё РІ РѕРґРЅРѕР№ РёР· РІС‹Р·С‹РІР°РµРјС‹С… РїСЂРѕС†РµРґСѓСЂ
 
-  // Считаем следующий блок каталога архива, если все файлы из текущего уже перечислены
+  // РЎС‡РёС‚Р°РµРј СЃР»РµРґСѓСЋС‰РёР№ Р±Р»РѕРє РєР°С‚Р°Р»РѕРіР° Р°СЂС…РёРІР°, РµСЃР»Рё РІСЃРµ С„Р°Р№Р»С‹ РёР· С‚РµРєСѓС‰РµРіРѕ СѓР¶Рµ РїРµСЂРµС‡РёСЃР»РµРЅС‹
   if( current_block < 0 || ++current_file_in_block >= dirblock->total_files)
   {
     FreeAndNil (dirblock);
@@ -104,11 +104,11 @@ int WINAPI _export GetArcItem(struct PluginPanelItem *Item,struct ArcItemInfo *I
         return GETARC_EOF;
       }
 
-      // Если это блок каталога - прочитаем его и выйдем из цикла
+      // Р•СЃР»Рё СЌС‚Рѕ Р±Р»РѕРє РєР°С‚Р°Р»РѕРіР° - РїСЂРѕС‡РёС‚Р°РµРј РµРіРѕ Рё РІС‹Р№РґРµРј РёР· С†РёРєР»Р°
       BLOCK& descriptor = arcinfo->control_blocks_descriptors [current_block];
       if (descriptor.type == DIR_BLOCK)
       {
-         dirblock = new DIRECTORY_BLOCK (*arcinfo, descriptor);
+         dirblock = new DIRECTORY_BLOCK (*arcinfo, descriptor, NULL, NULL);
          current_file_in_block = current_data_block = 0;
          if (dirblock->total_files>0)  break;
          FreeAndNil (dirblock);
@@ -117,7 +117,7 @@ int WINAPI _export GetArcItem(struct PluginPanelItem *Item,struct ArcItemInfo *I
     //printf("%d files\n", dirblock->total_files);
   }
 
-  // Заполним описание файла
+  // Р—Р°РїРѕР»РЅРёРј РѕРїРёСЃР°РЅРёРµ С„Р°Р№Р»Р°
   int i = current_file_in_block;
   Item->FindData.dwFileAttributes = dirblock->isdir[i]? FILE_ATTRIBUTE_DIRECTORY : 0;
   UnixTimeToFileTime (dirblock->time[i], &Item->FindData.ftLastWriteTime);
@@ -130,24 +130,23 @@ int WINAPI _export GetArcItem(struct PluginPanelItem *Item,struct ArcItemInfo *I
   Item->CRC32  = dirblock->crc[i];
   Info->UnpVer = UnpVer;
 
-  // Теперь извлечём информацию из описания солид-блока
+  // РўРµРїРµСЂСЊ РёР·РІР»РµС‡С‘Рј РёРЅС„РѕСЂРјР°С†РёСЋ РёР· РѕРїРёСЃР°РЅРёСЏ СЃРѕР»РёРґ-Р±Р»РѕРєР°
   int &b = current_data_block;
-  // Увеличим номер солид-блока если мы вышли за последний принадлежащий ему файл
+  // РЈРІРµР»РёС‡РёРј РЅРѕРјРµСЂ СЃРѕР»РёРґ-Р±Р»РѕРєР° РµСЃР»Рё РјС‹ РІС‹С€Р»Рё Р·Р° РїРѕСЃР»РµРґРЅРёР№ РїСЂРёРЅР°РґР»РµР¶Р°С‰РёР№ РµРјСѓ С„Р°Р№Р»
   if (current_file_in_block >= dirblock->block_end(b))
     b++;
-  // Если это первый файл в солид-блоке - соберём block-related информацию
+  // Р•СЃР»Рё СЌС‚Рѕ РїРµСЂРІС‹Р№ С„Р°Р№Р» РІ СЃРѕР»РёРґ-Р±Р»РѕРєРµ - СЃРѕР±РµСЂС‘Рј block-related РёРЅС„РѕСЂРјР°С†РёСЋ
   if (current_file_in_block == dirblock->block_start(b))
-  { // Запишем на первый файл в блоке весь его упакованный размер
+  { // Р—Р°РїРёС€РµРј РЅР° РїРµСЂРІС‹Р№ С„Р°Р№Р» РІ Р±Р»РѕРєРµ РІРµСЃСЊ РµРіРѕ СѓРїР°РєРѕРІР°РЅРЅС‹Р№ СЂР°Р·РјРµСЂ
     uint64 packed = dirblock->data_block[b].compsize;
     Item->PackSizeHigh = packed >> 32;
     Item->PackSize     = packed;
-    // Запомним информацию о солид-блоке для использования её со всеми файлами из этого солид-блока
-    char *c = dirblock->data_block[b].compressor;
+    // Р—Р°РїРѕРјРЅРёРј РёРЅС„РѕСЂРјР°С†РёСЋ Рѕ СЃРѕР»РёРґ-Р±Р»РѕРєРµ РґР»СЏ РёСЃРїРѕР»СЊР·РѕРІР°РЅРёСЏ РµС‘ СЃРѕ РІСЃРµРјРё С„Р°Р№Р»Р°РјРё РёР· СЌС‚РѕРіРѕ СЃРѕР»РёРґ-Р±Р»РѕРєР°
     Solid     = dirblock->block_start(b)+1 != dirblock->block_end(b);
-    Encrypted = strstr (c, "+aes-")!=NULL || strstr (c, "+serpent-")!=NULL || strstr (c, "+blowfish-")!=NULL || strstr (c, "+twofish-")!=NULL;
+    Encrypted = compressorIsEncrypted_Guess   (dirblock->data_block[b].compressor);
     DictSize  = compressorGetDecompressionMem (dirblock->data_block[b].compressor);
   }
-  // Заполним поля информацией, считанной при обработке первого файла в солид-блоке
+  // Р—Р°РїРѕР»РЅРёРј РїРѕР»СЏ РёРЅС„РѕСЂРјР°С†РёРµР№, СЃС‡РёС‚Р°РЅРЅРѕР№ РїСЂРё РѕР±СЂР°Р±РѕС‚РєРµ РїРµСЂРІРѕРіРѕ С„Р°Р№Р»Р° РІ СЃРѕР»РёРґ-Р±Р»РѕРєРµ
   Info->Solid     = Solid;
   Info->Encrypted = Encrypted;
   Info->DictSize  = DictSize;
@@ -158,7 +157,7 @@ int WINAPI _export GetArcItem(struct PluginPanelItem *Item,struct ArcItemInfo *I
 BOOL WINAPI _export CloseArchive(struct ArcInfo *Info)
 {
   if (setjmp(jumper) != 0)
-    {cleanup(); return FALSE;}  // Сюда мы попадём при возникновении ошибки в одной из вызываемых процедур
+    {cleanup(); return FALSE;}  // РЎСЋРґР° РјС‹ РїРѕРїР°РґС‘Рј РїСЂРё РІРѕР·РЅРёРєРЅРѕРІРµРЅРёРё РѕС€РёР±РєРё РІ РѕРґРЅРѕР№ РёР· РІС‹Р·С‹РІР°РµРјС‹С… РїСЂРѕС†РµРґСѓСЂ
 
   Info->SFXSize = SFXSize;
   Info->Comment = arcinfo->arcComment.size>0;
@@ -180,8 +179,8 @@ BOOL WINAPI _export GetFormatName(int Type,char *FormatName,char *DefaultExt)
 {
   if (Type==0)
   {
-    strcpy(FormatName,"FreeArc");
-    strcpy(DefaultExt,"arc");
+    strcpy(FormatName, "FreeArc");
+    strcpy(DefaultExt, FREEARC_FILE_EXTENSION);
     return(TRUE);
   }
   return(FALSE);

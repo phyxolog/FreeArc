@@ -1,13 +1,13 @@
 {-# OPTIONS_GHC -cpp #-}
 ----------------------------------------------------------------------------------------------------
----- Информирование пользователя о ходе выполнения программы (CUI - Console User Interface).  ------
+---- РРЅС„РѕСЂРјРёСЂРѕРІР°РЅРёРµ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ Рѕ С…РѕРґРµ РІС‹РїРѕР»РЅРµРЅРёСЏ РїСЂРѕРіСЂР°РјРјС‹ (CUI - Console User Interface).  ------
 ----------------------------------------------------------------------------------------------------
 module UIBase where
 
 import Prelude hiding (catch)
 import Control.Monad
 import Control.Concurrent
-import Control.Exception
+import Control.OldException
 import Data.Char
 import Data.IORef
 import Foreign
@@ -28,48 +28,48 @@ import FileInfo
 import Options
 
 
--- |Здесь хранится вся информация о команде и процессе её выполнения, требуемая для отображения
--- индикатора прогресса и вывода финальной статистики
+-- |Р—РґРµСЃСЊ С…СЂР°РЅРёС‚СЃСЏ РІСЃСЏ РёРЅС„РѕСЂРјР°С†РёСЏ Рѕ РєРѕРјР°РЅРґРµ Рё РїСЂРѕС†РµСЃСЃРµ РµС‘ РІС‹РїРѕР»РЅРµРЅРёСЏ, С‚СЂРµР±СѓРµРјР°СЏ РґР»СЏ РѕС‚РѕР±СЂР°Р¶РµРЅРёСЏ
+-- РёРЅРґРёРєР°С‚РѕСЂР° РїСЂРѕРіСЂРµСЃСЃР° Рё РІС‹РІРѕРґР° С„РёРЅР°Р»СЊРЅРѕР№ СЃС‚Р°С‚РёСЃС‚РёРєРё
 data UI_State = UI_State {
-    total_files     :: !FileCount   -- Кол-во файлов, которые она должна обработать
-  , total_bytes     :: !FileSize    -- Общий объём этих файлов (в распакованном виде)
-  , archive_total_bytes      :: !FileSize    -- Общий объём файлов в архиве - устанавливается только для команд распаковки
-  , archive_total_compressed :: !FileSize    -- Общий объём файлов в архиве (в сжатом виде)
-  , datatype        ::  DataType    -- Обрабатываемая в данный момент часть архива: файл/каталог/служебные данные
-  , uiFileinfo      :: !(Maybe FileInfo)  -- Текущий обрабатываемый файл (если есть)
-  -- В зависимости от того, какая часть архива сейчас обрабатывается, статистика заносится
-  -- либо на счёт файлов:
-  ,    files        :: !FileCount   -- Кол-во уже обработанных файлов
-  ,    bytes        :: !FileSize    -- Объём уже обработанных данных в распакованном виде
-  ,    cbytes       :: !FileSize    -- Объём уже обработанных данных в упакованном виде
-  -- либо на счёт каталогов (служебная информация не подсчитывается):
-  ,    dirs         :: !FileCount   -- Кол-во созданных каталогов и других служебных блоков
-  ,    dir_bytes    :: !FileSize    -- Объём уже обработанных данных в распакованном виде
-  ,    dir_cbytes   :: !FileSize    -- Объём уже обработанных данных в упакованном виде
-  -- Кроме того, мы запоминаем, какая часть из этих данных - на самом деле не упаковывалась (это полезно для определения реальной скорости упаковки):
-  ,    fake_files   :: !FileCount   -- Кол-во уже обработанных файлов
-  ,    fake_bytes   :: !FileSize    -- Объём уже обработанных данных в распакованном виде
-  ,    fake_cbytes  :: !FileSize    -- Объём уже обработанных данных в упакованном виде
-  -- Информация о текущем солид-блоке
-  ,    algorithmsCount :: Int       -- Кол-во алгоритмов в цепочке
-  ,    rw_ops       :: [[UI_RW FileSize]] -- Последовательность операций чтения/записи с разбивкой по отдельным алгоритмам
-  ,    r_bytes      :: FileSize     -- Объём уже обработанных данных на входе первого алгоритма сжатия
-  ,    rnum_bytes   :: FileSize     -- Объём уже обработанных данных на входе последнего алгоритма сжатия
+    total_files     :: !FileCount   -- РљРѕР»-РІРѕ С„Р°Р№Р»РѕРІ, РєРѕС‚РѕСЂС‹Рµ РѕРЅР° РґРѕР»Р¶РЅР° РѕР±СЂР°Р±РѕС‚Р°С‚СЊ
+  , total_bytes     :: !FileSize    -- РћР±С‰РёР№ РѕР±СЉС‘Рј СЌС‚РёС… С„Р°Р№Р»РѕРІ (РІ СЂР°СЃРїР°РєРѕРІР°РЅРЅРѕРј РІРёРґРµ)
+  , archive_total_bytes      :: !FileSize    -- РћР±С‰РёР№ РѕР±СЉС‘Рј С„Р°Р№Р»РѕРІ РІ Р°СЂС…РёРІРµ - СѓСЃС‚Р°РЅР°РІР»РёРІР°РµС‚СЃСЏ С‚РѕР»СЊРєРѕ РґР»СЏ РєРѕРјР°РЅРґ СЂР°СЃРїР°РєРѕРІРєРё
+  , archive_total_compressed :: !FileSize    -- РћР±С‰РёР№ РѕР±СЉС‘Рј С„Р°Р№Р»РѕРІ РІ Р°СЂС…РёРІРµ (РІ СЃР¶Р°С‚РѕРј РІРёРґРµ)
+  , datatype        ::  DataType    -- РћР±СЂР°Р±Р°С‚С‹РІР°РµРјР°СЏ РІ РґР°РЅРЅС‹Р№ РјРѕРјРµРЅС‚ С‡Р°СЃС‚СЊ Р°СЂС…РёРІР°: С„Р°Р№Р»/РєР°С‚Р°Р»РѕРі/СЃР»СѓР¶РµР±РЅС‹Рµ РґР°РЅРЅС‹Рµ
+  , uiFileinfo      :: !(Maybe FileInfo)  -- РўРµРєСѓС‰РёР№ РѕР±СЂР°Р±Р°С‚С‹РІР°РµРјС‹Р№ С„Р°Р№Р» (РµСЃР»Рё РµСЃС‚СЊ)
+  -- Р’ Р·Р°РІРёСЃРёРјРѕСЃС‚Рё РѕС‚ С‚РѕРіРѕ, РєР°РєР°СЏ С‡Р°СЃС‚СЊ Р°СЂС…РёРІР° СЃРµР№С‡Р°СЃ РѕР±СЂР°Р±Р°С‚С‹РІР°РµС‚СЃСЏ, СЃС‚Р°С‚РёСЃС‚РёРєР° Р·Р°РЅРѕСЃРёС‚СЃСЏ
+  -- Р»РёР±Рѕ РЅР° СЃС‡С‘С‚ С„Р°Р№Р»РѕРІ:
+  ,    files        :: !FileCount   -- РљРѕР»-РІРѕ СѓР¶Рµ РѕР±СЂР°Р±РѕС‚Р°РЅРЅС‹С… С„Р°Р№Р»РѕРІ
+  ,    bytes        :: !FileSize    -- РћР±СЉС‘Рј СѓР¶Рµ РѕР±СЂР°Р±РѕС‚Р°РЅРЅС‹С… РґР°РЅРЅС‹С… РІ СЂР°СЃРїР°РєРѕРІР°РЅРЅРѕРј РІРёРґРµ
+  ,    cbytes       :: !FileSize    -- РћР±СЉС‘Рј СѓР¶Рµ РѕР±СЂР°Р±РѕС‚Р°РЅРЅС‹С… РґР°РЅРЅС‹С… РІ СѓРїР°РєРѕРІР°РЅРЅРѕРј РІРёРґРµ
+  -- Р»РёР±Рѕ РЅР° СЃС‡С‘С‚ РєР°С‚Р°Р»РѕРіРѕРІ (СЃР»СѓР¶РµР±РЅР°СЏ РёРЅС„РѕСЂРјР°С†РёСЏ РЅРµ РїРѕРґСЃС‡РёС‚С‹РІР°РµС‚СЃСЏ):
+  ,    dirs         :: !FileCount   -- РљРѕР»-РІРѕ СЃРѕР·РґР°РЅРЅС‹С… РєР°С‚Р°Р»РѕРіРѕРІ Рё РґСЂСѓРіРёС… СЃР»СѓР¶РµР±РЅС‹С… Р±Р»РѕРєРѕРІ
+  ,    dir_bytes    :: !FileSize    -- РћР±СЉС‘Рј СѓР¶Рµ РѕР±СЂР°Р±РѕС‚Р°РЅРЅС‹С… РґР°РЅРЅС‹С… РІ СЂР°СЃРїР°РєРѕРІР°РЅРЅРѕРј РІРёРґРµ
+  ,    dir_cbytes   :: !FileSize    -- РћР±СЉС‘Рј СѓР¶Рµ РѕР±СЂР°Р±РѕС‚Р°РЅРЅС‹С… РґР°РЅРЅС‹С… РІ СѓРїР°РєРѕРІР°РЅРЅРѕРј РІРёРґРµ
+  -- РљСЂРѕРјРµ С‚РѕРіРѕ, РјС‹ Р·Р°РїРѕРјРёРЅР°РµРј, РєР°РєР°СЏ С‡Р°СЃС‚СЊ РёР· СЌС‚РёС… РґР°РЅРЅС‹С… - РЅР° СЃР°РјРѕРј РґРµР»Рµ РЅРµ СѓРїР°РєРѕРІС‹РІР°Р»Р°СЃСЊ (СЌС‚Рѕ РїРѕР»РµР·РЅРѕ РґР»СЏ РѕРїСЂРµРґРµР»РµРЅРёСЏ СЂРµР°Р»СЊРЅРѕР№ СЃРєРѕСЂРѕСЃС‚Рё СѓРїР°РєРѕРІРєРё):
+  ,    fake_files   :: !FileCount   -- РљРѕР»-РІРѕ СѓР¶Рµ РѕР±СЂР°Р±РѕС‚Р°РЅРЅС‹С… С„Р°Р№Р»РѕРІ
+  ,    fake_bytes   :: !FileSize    -- РћР±СЉС‘Рј СѓР¶Рµ РѕР±СЂР°Р±РѕС‚Р°РЅРЅС‹С… РґР°РЅРЅС‹С… РІ СЂР°СЃРїР°РєРѕРІР°РЅРЅРѕРј РІРёРґРµ
+  ,    fake_cbytes  :: !FileSize    -- РћР±СЉС‘Рј СѓР¶Рµ РѕР±СЂР°Р±РѕС‚Р°РЅРЅС‹С… РґР°РЅРЅС‹С… РІ СѓРїР°РєРѕРІР°РЅРЅРѕРј РІРёРґРµ
+  -- РРЅС„РѕСЂРјР°С†РёСЏ Рѕ С‚РµРєСѓС‰РµРј СЃРѕР»РёРґ-Р±Р»РѕРєРµ
+  ,    algorithmsCount :: Int       -- РљРѕР»-РІРѕ Р°Р»РіРѕСЂРёС‚РјРѕРІ РІ С†РµРїРѕС‡РєРµ
+  ,    rw_ops       :: [[UI_RW FileSize]] -- РџРѕСЃР»РµРґРѕРІР°С‚РµР»СЊРЅРѕСЃС‚СЊ РѕРїРµСЂР°С†РёР№ С‡С‚РµРЅРёСЏ/Р·Р°РїРёСЃРё СЃ СЂР°Р·Р±РёРІРєРѕР№ РїРѕ РѕС‚РґРµР»СЊРЅС‹Рј Р°Р»РіРѕСЂРёС‚РјР°Рј
+  ,    r_bytes      :: FileSize     -- РћР±СЉС‘Рј СѓР¶Рµ РѕР±СЂР°Р±РѕС‚Р°РЅРЅС‹С… РґР°РЅРЅС‹С… РЅР° РІС…РѕРґРµ РїРµСЂРІРѕРіРѕ Р°Р»РіРѕСЂРёС‚РјР° СЃР¶Р°С‚РёСЏ
+  ,    rnum_bytes   :: FileSize     -- РћР±СЉС‘Рј СѓР¶Рµ РѕР±СЂР°Р±РѕС‚Р°РЅРЅС‹С… РґР°РЅРЅС‹С… РЅР° РІС…РѕРґРµ РїРѕСЃР»РµРґРЅРµРіРѕ Р°Р»РіРѕСЂРёС‚РјР° СЃР¶Р°С‚РёСЏ
   }
 
--- |Обрабатываемая в данный момент часть архива: файл/каталог/служебные данные
+-- |РћР±СЂР°Р±Р°С‚С‹РІР°РµРјР°СЏ РІ РґР°РЅРЅС‹Р№ РјРѕРјРµРЅС‚ С‡Р°СЃС‚СЊ Р°СЂС…РёРІР°: С„Р°Р№Р»/РєР°С‚Р°Р»РѕРі/СЃР»СѓР¶РµР±РЅС‹Рµ РґР°РЅРЅС‹Рµ
 data DataType = File | Dir | CData   deriving Eq
 
--- |Операции чтения и записи в списке операций
+-- |РћРїРµСЂР°С†РёРё С‡С‚РµРЅРёСЏ Рё Р·Р°РїРёСЃРё РІ СЃРїРёСЃРєРµ РѕРїРµСЂР°С†РёР№
 data UI_RW a = UI_Read a | UI_Write a
 
--- |Тип индикатора - только прценты или + файлы/...
+-- |РўРёРї РёРЅРґРёРєР°С‚РѕСЂР° - С‚РѕР»СЊРєРѕ РїСЂС†РµРЅС‚С‹ РёР»Рё + С„Р°Р№Р»С‹/...
 data IndicatorType = INDICATOR_PERCENTS | INDICATOR_FULL   deriving Eq
 
 
--- Выполняемая сейчас команда
+-- Р’С‹РїРѕР»РЅСЏРµРјР°СЏ СЃРµР№С‡Р°СЃ РєРѕРјР°РЅРґР°
 ref_command               =  unsafePerformIO$ newIORef$ error "undefined UI::ref_command"
--- Обрабатываемый архив (не совпадает с command.$cmd_arcname при тестировании временного архива после упаковки)
+-- РћР±СЂР°Р±Р°С‚С‹РІР°РµРјС‹Р№ Р°СЂС…РёРІ (РЅРµ СЃРѕРІРїР°РґР°РµС‚ СЃ command.$cmd_arcname РїСЂРё С‚РµСЃС‚РёСЂРѕРІР°РЅРёРё РІСЂРµРјРµРЅРЅРѕРіРѕ Р°СЂС…РёРІР° РїРѕСЃР»Рµ СѓРїР°РєРѕРІРєРё)
 uiArcname                 =  unsafePerformIO$ newIORef$ error "undefined UI::uiArcname"
 refStartArchiveTime       =  unsafePerformIO$ newIORef$ error "undefined UI::refStartArchiveTime"
 refStartPauseTime         =  unsafePerformIO$ newIORef$ error "undefined UI::refStartPauseTime"
@@ -78,27 +78,27 @@ ref_ui_state              =  unsafePerformIO$ newIORef$ error "undefined UI::ref
 putHeader                 =  unsafePerformIO$ init_once
 ref_w0                    =  unsafePerformIO$ newIORef$ error "undefined UI::ref_w0"         :: IORef Int
 ref_arcExist              =  unsafePerformIO$ newIORef$ error "undefined UI::ref_arcExist"   :: IORef Bool
--- Текущая стадия выполнения команды или имя файла из uiFileinfo
-uiMessage                 =  unsafePerformIO$ newIORef$ ""
--- |Счётчик просканированных файлов
+-- РўРµРєСѓС‰Р°СЏ СЃС‚Р°РґРёСЏ РІС‹РїРѕР»РЅРµРЅРёСЏ РєРѕРјР°РЅРґС‹ РёР»Рё РёРјСЏ С„Р°Р№Р»Р° РёР· uiFileinfo
+uiMessage                 =  unsafePerformIO$ newIORef$ ("","")
+-- |РЎС‡С‘С‚С‡РёРє РїСЂРѕСЃРєР°РЅРёСЂРѕРІР°РЅРЅС‹С… С„Р°Р№Р»РѕРІ
 files_scanned             =  unsafePerformIO$ newIORef$ (0::Integer)
 
--- |Глобальная переменная, хранящая состояние индикатора прогресса
+-- |Р“Р»РѕР±Р°Р»СЊРЅР°СЏ РїРµСЂРµРјРµРЅРЅР°СЏ, С…СЂР°РЅСЏС‰Р°СЏ СЃРѕСЃС‚РѕСЏРЅРёРµ РёРЅРґРёРєР°С‚РѕСЂР° РїСЂРѕРіСЂРµСЃСЃР°
 aProgressIndicatorState    =  unsafePerformIO$ newIORef$ error "undefined UI::aProgressIndicatorState"
 aProgressIndicatorEnabled  =  unsafePerformIO$ newIORef$ False
--- |Время начала отсчёта текущего индиатора
+-- |Р’СЂРµРјСЏ РЅР°С‡Р°Р»Р° РѕС‚СЃС‡С‘С‚Р° С‚РµРєСѓС‰РµРіРѕ РёРЅРґРёР°С‚РѕСЂР°
 indicator_start_real_secs  =  unsafePerformIO$ newIORef$ (0::Double)
 
--- |Синхронизация доступа к UI
+-- |РЎРёРЅС…СЂРѕРЅРёР·Р°С†РёСЏ РґРѕСЃС‚СѓРїР° Рє UI
 syncUI = withMVar mvarSyncUI . const;  mvarSyncUI = unsafePerformIO$ newMVar "mvarSyncUI"
 
 {-# NOINLINE indicators #-}
--- |Переменные для разбуживания тредов индикации
+-- |РџРµСЂРµРјРµРЅРЅС‹Рµ РґР»СЏ СЂР°Р·Р±СѓР¶РёРІР°РЅРёСЏ С‚СЂРµРґРѕРІ РёРЅРґРёРєР°С†РёРё
 indicators  = unsafePerformIO$ newMVar$ ([]::[MVar Message])   -- list of indicator threads
 type Message = (Update, IO())                                  -- message sent to indicator thread in order to make an update
 data Update  = ForceUpdate | LazyUpdate  deriving (Eq)         -- ForceUpdate message requesting whole update sent after (de)compression has been finished
 
--- |Принудительно обновить все индикаторы
+-- |РџСЂРёРЅСѓРґРёС‚РµР»СЊРЅРѕ РѕР±РЅРѕРІРёС‚СЊ РІСЃРµ РёРЅРґРёРєР°С‚РѕСЂС‹
 updateAllIndicators = do
   indicators' <- val indicators
   for indicators' $ \indicator -> do
@@ -106,10 +106,10 @@ updateAllIndicators = do
     putMVar indicator (ForceUpdate, putMVar x ())
     takeMVar x
 
--- |Выполнять в бэкграунде action каждые secs секунд
+-- |Р’С‹РїРѕР»РЅСЏС‚СЊ РІ Р±СЌРєРіСЂР°СѓРЅРґРµ action РєР°Р¶РґС‹Рµ secs СЃРµРєСѓРЅРґ
 backgroundThread secs action = do
   x <- newEmptyMVar
-  indicators ++= [x]  -- добавление в этот список позволяет также обновлять индикаторы "извне"
+  indicators ++= [x]  -- РґРѕР±Р°РІР»РµРЅРёРµ РІ СЌС‚РѕС‚ СЃРїРёСЃРѕРє РїРѕР·РІРѕР»СЏРµС‚ С‚Р°РєР¶Рµ РѕР±РЅРѕРІР»СЏС‚СЊ РёРЅРґРёРєР°С‚РѕСЂС‹ "РёР·РІРЅРµ"
   forkIO $ do
     foreverM $ do
       sleepSeconds secs
@@ -121,21 +121,23 @@ backgroundThread secs action = do
         action updateMode
       afterAction
 
--- |Тред, следящий за indicator, и выводящий время от времени его обновлённые значения
+-- |РўСЂРµРґ, СЃР»РµРґСЏС‰РёР№ Р·Р° indicator, Рё РІС‹РІРѕРґСЏС‰РёР№ РІСЂРµРјСЏ РѕС‚ РІСЂРµРјРµРЅРё РµРіРѕ РѕР±РЅРѕРІР»С‘РЅРЅС‹Рµ Р·РЅР°С‡РµРЅРёСЏ
 indicatorThread secs output =
   backgroundThread secs $ \updateMode -> do
     whenM (val aProgressIndicatorEnabled) $ do
       operationTerminated' <- val operationTerminated
-      (indicator, indType, arcname, direction, bRational :: Rational, bytes', total') <- val aProgressIndicatorState
+      (indicator, indType, arcname, winTitleMsg, bRational :: Rational, bytes', total') <- val aProgressIndicatorState
       let b = round bRational  -- we use Rational in order to save decimal fractions (results of 90%/10% counting rule)
       when (indicator /= NoIndicator  &&  not operationTerminated') $ do
         bytes <- bytes' b;  total <- total'
-        -- Отношение объёма обработанных данных к общему объёму
-        let processed = total>0 &&& (fromIntegral bytes / fromIntegral total :: Double)
+        bytes <- return (bytes `min` total)   -- bytes РЅРµ РґРѕР»Р¶РЅРѕ РїСЂРµРІС‹С€Р°С‚СЊ total
+        -- РћС‚РЅРѕС€РµРЅРёРµ РѕР±СЉС‘РјР° РѕР±СЂР°Р±РѕС‚Р°РЅРЅС‹С… РґР°РЅРЅС‹С… Рє РѕР±С‰РµРјСѓ РѕР±СЉС‘РјСѓ
+        let processed | total>0   =  fromIntegral bytes / fromIntegral total :: Double
+                      | otherwise =  1   -- "Processed 0 bytes of 0 == 100%"
         secs <- return_real_secs
         sec0 <- val indicator_start_real_secs
         let remains  = if processed>0.001  then " "++showHMS(sec0+(secs-sec0)/processed-secs)  else ""
-            winTitle = "{"++trimLeft p++remains++"}" ++ direction ++ takeFileName arcname
+            winTitle = trimLeft p++remains++" | " ++ (format winTitleMsg (takeFileName arcname))
             p        = percents indicator bytes total
         output updateMode indicator indType winTitle b bytes total processed p
 
@@ -145,90 +147,104 @@ indicatorThread secs output =
 
 
 ----------------------------------------------------------------------------------------------------
----- Индикатор прогресса ---------------------------------------------------------------------------
+---- РРЅРґРёРєР°С‚РѕСЂ РїСЂРѕРіСЂРµСЃСЃР° ---------------------------------------------------------------------------
 ----------------------------------------------------------------------------------------------------
 
--- |Типы индикатора прогресса (молчаливый, проценты, десятые процента)
+-- |РўРёРїС‹ РёРЅРґРёРєР°С‚РѕСЂР° РїСЂРѕРіСЂРµСЃСЃР° (РјРѕР»С‡Р°Р»РёРІС‹Р№, РїСЂРѕС†РµРЅС‚С‹, РґРµСЃСЏС‚С‹Рµ РїСЂРѕС†РµРЅС‚Р°)
 data Indicator = NoIndicator | ShortIndicator | LongIndicator   deriving (Eq)
 
-bytes_per_sec = 1*mb  -- Typical (de)compression speed
+bytes_per_sec = 10*mb  -- Typical (de)compression speed
 
--- |Выбрать индикатор прогресса, основываясь на показаниях свидетелей :)
+-- |Р’С‹Р±СЂР°С‚СЊ РёРЅРґРёРєР°С‚РѕСЂ РїСЂРѕРіСЂРµСЃСЃР°, РѕСЃРЅРѕРІС‹РІР°СЏСЃСЊ РЅР° РїРѕРєР°Р·Р°РЅРёСЏС… СЃРІРёРґРµС‚РµР»РµР№ :)
 select_indicator command total_bytes  =  case (opt_indicator command)
-  of "0"                                    ->  NoIndicator      -- опция "-i" - отключить индикатор!
-     _ | i total_bytes < bytes_per_sec*100  ->  ShortIndicator   -- индикатор в процентах, если общий объём данных меньше 100 мб (при этом в секунду обрабатывается больше одного процента данных)
-       | otherwise                          ->  LongIndicator    -- индикатор в десятых долях процента, если данных больше 100 мб
+  of "0"                                    ->  NoIndicator      -- РѕРїС†РёСЏ "-i" - РѕС‚РєР»СЋС‡РёС‚СЊ РёРЅРґРёРєР°С‚РѕСЂ!
+     _ | i total_bytes < bytes_per_sec*100  ->  ShortIndicator   -- РёРЅРґРёРєР°С‚РѕСЂ РІ РїСЂРѕС†РµРЅС‚Р°С…, РµСЃР»Рё РѕР±С‰РёР№ РѕР±СЉС‘Рј РґР°РЅРЅС‹С… РјРµРЅСЊС€Рµ 1000 РјР± (РїСЂРё СЌС‚РѕРј РІ СЃРµРєСѓРЅРґСѓ РѕР±СЂР°Р±Р°С‚С‹РІР°РµС‚СЃСЏ Р±РѕР»СЊС€Рµ РѕРґРЅРѕРіРѕ РїСЂРѕС†РµРЅС‚Р° РґР°РЅРЅС‹С…)
+       | otherwise                          ->  LongIndicator    -- РёРЅРґРёРєР°С‚РѕСЂ РІ РґРµСЃСЏС‚С‹С… РґРѕР»СЏС… РїСЂРѕС†РµРЅС‚Р°, РµСЃР»Рё РґР°РЅРЅС‹С… Р±РѕР»СЊС€Рµ 1000 РјР±
 
--- |Вывести индикатор прогресса в соответствии с выбранной точностью
+-- |Р’С‹РІРµСЃС‚Рё РёРЅРґРёРєР°С‚РѕСЂ РїСЂРѕРіСЂРµСЃСЃР° РІ СЃРѕРѕС‚РІРµС‚СЃС‚РІРёРё СЃ РІС‹Р±СЂР°РЅРЅРѕР№ С‚РѕС‡РЅРѕСЃС‚СЊСЋ
 percents NoIndicator    current total  =  ""
 percents ShortIndicator current total  =  right_justify 3 (ratio2 current total) ++ "%"
 percents LongIndicator  current total  =  right_justify 5 (ratio3 current total) ++ "%"
 
--- |Создать место для индикатора прогресса
+-- |РЎРѕР·РґР°С‚СЊ РјРµСЃС‚Рѕ РґР»СЏ РёРЅРґРёРєР°С‚РѕСЂР° РїСЂРѕРіСЂРµСЃСЃР°
 open_percents     =  flip replicate ' '  . indicator_len
--- |Вернуться назад на столько символов, сколько занимает индикатор прогресса
+-- |Р’РµСЂРЅСѓС‚СЊСЃСЏ РЅР°Р·Р°Рґ РЅР° СЃС‚РѕР»СЊРєРѕ СЃРёРјРІРѕР»РѕРІ, СЃРєРѕР»СЊРєРѕ Р·Р°РЅРёРјР°РµС‚ РёРЅРґРёРєР°С‚РѕСЂ РїСЂРѕРіСЂРµСЃСЃР°
 back_percents     =  flip replicate '\b' . indicator_len
--- |Напечатать пробелы поверх использовавшегося индикатора прогресса
+-- |РќР°РїРµС‡Р°С‚Р°С‚СЊ РїСЂРѕР±РµР»С‹ РїРѕРІРµСЂС… РёСЃРїРѕР»СЊР·РѕРІР°РІС€РµРіРѕСЃСЏ РёРЅРґРёРєР°С‚РѕСЂР° РїСЂРѕРіСЂРµСЃСЃР°
 clear_percents i  =  back_percents i ++ open_percents i
 
--- |Размер индикатора прогресса в символах
+-- |Р Р°Р·РјРµСЂ РёРЅРґРёРєР°С‚РѕСЂР° РїСЂРѕРіСЂРµСЃСЃР° РІ СЃРёРјРІРѕР»Р°С…
 indicator_len NoIndicator    = 0
 indicator_len ShortIndicator = 4
 indicator_len LongIndicator  = 6
 
 -- |Format percent ratio with 2 digits
-ratio2 count 0     =  "0"
-ratio2 count total =  show$ count*100 `div` total
+ratio2 count 0     =  "100"     -- "Processed 0 bytes of 0 == 100%"
+ratio2 count total =  show$ ((toInteger count)*100) `div` (toInteger total)
 
 -- |Format percent ratio with 2+1 digits
-ratio3 count 0     =  "0.0"
-ratio3 count total =  case (show$ count*1000 `div` total) of
+ratio3 count 0     =  "100.0"   -- "Processed 0 bytes of 0 == 100%"
+ratio3 count total =  case (show$ ((toInteger count)*1000) `div` (toInteger total)) of
                         [digit]  -> "0." ++ [digit]
                         digits   -> init digits ++ ['.', last digits]
 
--- |Вывести число, отделяя тысячи, миллионы и т.д.: "1.234.567"
+-- |Format percent ratio with 2+2 digits
+ratio4 count 0     =  "100.00"   -- "Processed 0 bytes of 0 == 100%"
+ratio4 count total =  case (show$ ((toInteger count)*10000) `div` (toInteger total)) of
+                        [digit]          ->  "0.0" ++ [digit]
+                        [digit1,digit2]  ->  "0." ++ [digit1,digit2]
+                        digits           ->  dropEnd 2 digits ++ "." ++ lastElems 2 digits
+
+-- |Format percent ratio with 2+2 digits and rounding
+compression_ratio count 0     =  "100%"   -- "Processed 0 bytes of 0 == 100%"
+compression_ratio count total =  showFFloat (Just 2) ((i count)/(i total)*100::Double) "%"
+
+
+-- |Р’С‹РІРµСЃС‚Рё С‡РёСЃР»Рѕ, РѕС‚РґРµР»СЏСЏ С‚С‹СЃСЏС‡Рё, РјРёР»Р»РёРѕРЅС‹ Рё С‚.Рґ.: "1.234.567"
 show3 :: (Show a) => a -> [Char]
 show3 = reverse.xxx.reverse.show
-          where xxx (a:b:c:d:e) = a:b:c:'.': xxx (d:e)
+          where xxx (a:b:c:d:e) = a:b:c:',': xxx (d:e)
                 xxx a = a
 
 {-# NOINLINE ratio2 #-}
 {-# NOINLINE ratio3 #-}
+{-# NOINLINE ratio4 #-}
+{-# NOINLINE compression_ratio #-}
 {-# NOINLINE show3 #-}
 
 
 ----------------------------------------------------------------------------------------------------
----- Вспомогательные функции для форматирования чисел/строк и работы с временем --------------------
+---- Р’СЃРїРѕРјРѕРіР°С‚РµР»СЊРЅС‹Рµ С„СѓРЅРєС†РёРё РґР»СЏ С„РѕСЂРјР°С‚РёСЂРѕРІР°РЅРёСЏ С‡РёСЃРµР»/СЃС‚СЂРѕРє Рё СЂР°Р±РѕС‚С‹ СЃ РІСЂРµРјРµРЅРµРј --------------------
 ----------------------------------------------------------------------------------------------------
 
--- |Разница между двумя временами в секундах - использует особенности внутреннего представления!!!
+-- |Р Р°Р·РЅРёС†Р° РјРµР¶РґСѓ РґРІСѓРјСЏ РІСЂРµРјРµРЅР°РјРё РІ СЃРµРєСѓРЅРґР°С… - РёСЃРїРѕР»СЊР·СѓРµС‚ РѕСЃРѕР±РµРЅРЅРѕСЃС‚Рё РІРЅСѓС‚СЂРµРЅРЅРµРіРѕ РїСЂРµРґСЃС‚Р°РІР»РµРЅРёСЏ!!!
 diffTimes (TOD sa pa) (TOD sb pb)  =  i(sa - sb) + (i(pa-pb) / 1e12)
 
--- |Добавить секунды к времени
+-- |Р”РѕР±Р°РІРёС‚СЊ СЃРµРєСѓРЅРґС‹ Рє РІСЂРµРјРµРЅРё
 addTime (TOD sa pa) secs  = TOD (sa+sb+sc) pc
   where
     sb = i$ floor secs
     pb = round$ (secs-sb)*1e12
     (sc,pc) = (pa+pb) `divMod` (10^12)
 
--- |Возвратить время в юниксовом формае (секунд бог знает с какого времени)
+-- |Р’РѕР·РІСЂР°С‚РёС‚СЊ РІСЂРµРјСЏ РІ СЋРЅРёРєСЃРѕРІРѕРј С„РѕСЂРјР°Рµ (СЃРµРєСѓРЅРґ Р±РѕРі Р·РЅР°РµС‚ СЃ РєР°РєРѕРіРѕ РІСЂРµРјРµРЅРё)
 getUnixTime = do
   (TOD seconds picoseconds) <- getClockTime
   return seconds
 
--- |Напечатать объём исходных и упакованных данных, и степень сжатия
+-- |РќР°РїРµС‡Р°С‚Р°С‚СЊ РѕР±СЉС‘Рј РёСЃС…РѕРґРЅС‹С… Рё СѓРїР°РєРѕРІР°РЅРЅС‹С… РґР°РЅРЅС‹С…, Рё СЃС‚РµРїРµРЅСЊ СЃР¶Р°С‚РёСЏ
 show_ratio cmd bytes cbytes =
   ""        ++ show3       (if (cmdType cmd == ADD_CMD) then bytes else cbytes) ++
    " => "   ++ show_bytes3 (if (cmdType cmd == ADD_CMD) then cbytes else bytes) ++ ". " ++
-   "Ratio " ++ ratio3 cbytes bytes ++ "%"
+   "Ratio " ++ compression_ratio cbytes bytes
 
--- |Возвратить строку, описывающую заданное время
-showTime secs  =  showFFloat (Just 2) secs " secs"
+-- |Р’РѕР·РІСЂР°С‚РёС‚СЊ СЃС‚СЂРѕРєСѓ, РѕРїРёСЃС‹РІР°СЋС‰СѓСЋ Р·Р°РґР°РЅРЅРѕРµ РІСЂРµРјСЏ
+showTime secs  =  showFFloat (Just 2) secs " sec"
 
--- |Возвратить строку, описывающую заданную скорость
-showSpeed bytes secs  =  show3(round$ i bytes/1000/secs) ++ " kB/s"
+-- |Р’РѕР·РІСЂР°С‚РёС‚СЊ СЃС‚СЂРѕРєСѓ, РѕРїРёСЃС‹РІР°СЋС‰СѓСЋ Р·Р°РґР°РЅРЅСѓСЋ СЃРєРѕСЂРѕСЃС‚СЊ
+showSpeed bytes secs  =  showFFloat (Just 2) (i bytes/secs/10^6) " mB/s"
 
--- |Отформатировать время как H:MM:SS
+-- |РћС‚С„РѕСЂРјР°С‚РёСЂРѕРІР°С‚СЊ РІСЂРµРјСЏ РєР°Рє H:MM:SS
 showHMS secs  =  show hour++":"++left_fill '0' 2 (show min)++":"++left_fill '0' 2 (show sec)
   where
     s = round secs
@@ -238,26 +254,25 @@ showHMS secs  =  show hour++":"++left_fill '0' 2 (show min)++":"++left_fill '0' 
 
 
 
--- |Отметить время, когда была достигнута определённая точка программы (чисто для внутренних бенчмарков)
+-- |РћС‚РјРµС‚РёС‚СЊ РІСЂРµРјСЏ, РєРѕРіРґР° Р±С‹Р»Р° РґРѕСЃС‚РёРіРЅСѓС‚Р° РѕРїСЂРµРґРµР»С‘РЅРЅР°СЏ С‚РѕС‡РєР° РїСЂРѕРіСЂР°РјРјС‹ (С‡РёСЃС‚Рѕ РґР»СЏ РІРЅСѓС‚СЂРµРЅРЅРёС… Р±РµРЅС‡РјР°СЂРєРѕРІ)
 debugLog label = do
-  condPrintLine   "$" $  label   -- вычислим label и напечатаем её значение
+  condPrintLine   "$" $  label   -- РІС‹С‡РёСЃР»РёРј label Рё РЅР°РїРµС‡Р°С‚Р°РµРј РµС‘ Р·РЅР°С‡РµРЅРёРµ
   real_secs <- return_real_secs
   condPrintLineLn "$" $  ": " ++ showTime real_secs
 
--- |Вывести информацию о списке, если он содержит как минимум два элемента
+-- |Р’С‹РІРµСЃС‚Рё РёРЅС„РѕСЂРјР°С†РёСЋ Рѕ СЃРїРёСЃРєРµ, РµСЃР»Рё РѕРЅ СЃРѕРґРµСЂР¶РёС‚ РєР°Рє РјРёРЅРёРјСѓРј РґРІР° СЌР»РµРјРµРЅС‚Р°
 debugLogList label list = do
   drop 1 list &&& debugLog (format label (show3$ length list))
 
--- |Добавить строчку в отладочный вывод программы
+-- |Р”РѕР±Р°РІРёС‚СЊ СЃС‚СЂРѕС‡РєСѓ РІ РѕС‚Р»Р°РґРѕС‡РЅС‹Р№ РІС‹РІРѕРґ РїСЂРѕРіСЂР°РјРјС‹
 debugLog0 = condPrintLineLn "$"
 
--- |Время, реально прошедшее с начала выполнения команды над текущим архивом
+-- |Р’СЂРµРјСЏ, СЂРµР°Р»СЊРЅРѕ РїСЂРѕС€РµРґС€РµРµ СЃ РЅР°С‡Р°Р»Р° РІС‹РїРѕР»РЅРµРЅРёСЏ РєРѕРјР°РЅРґС‹ РЅР°Рґ С‚РµРєСѓС‰РёРј Р°СЂС…РёРІРѕРј
 return_real_secs = do
   start_time    <- val refStartArchiveTime
   current_time  <- getClockTime
   return$ diffTimes current_time start_time
 
--- Вычитаем время, проведённое в паузе, из реального времени выполнения команды
 pause_real_secs = do
   refStartPauseTime =:: getClockTime
 
@@ -267,7 +282,11 @@ resume_real_secs = do
   let pause = diffTimes current_time start_time :: Double
   refStartArchiveTime .= (`addTime` pause)
 
+-- |Р’С‹С‡РёС‚Р°РµС‚ РІСЂРµРјСЏ, РїСЂРѕРІРµРґС‘РЅРЅРѕРµ РІ РїР°СѓР·Рµ, РёР· СЂРµР°Р»СЊРЅРѕРіРѕ РІСЂРµРјРµРЅРё РІС‹РїРѕР»РЅРµРЅРёСЏ РєРѕРјР°РЅРґС‹
 pauseTiming = bracket_ pause_real_secs resume_real_secs
+
+-- |РќР° РІСЂРµРјСЏ РїРµСЂРµРІРѕРґРёС‚ Win7+ РёРЅРґРёРєР°С‚РѕСЂ РїСЂРѕРіСЂРµСЃСЃР° РІ СЃРѕСЃС‚РѕСЏРЅРёРµ РїР°СѓР·С‹
+pauseTaskbar = bracket_ taskbar_Pause taskbar_Resume
 
 {-# NOINLINE diffTimes #-}
 {-# NOINLINE show_ratio #-}
@@ -275,7 +294,7 @@ pauseTiming = bracket_ pause_real_secs resume_real_secs
 
 
 ----------------------------------------------------------------------------------------------------
----- Выбор сообщений, соответствующих выполняемой команде ------------------------------------------
+---- Р’С‹Р±РѕСЂ СЃРѕРѕР±С‰РµРЅРёР№, СЃРѕРѕС‚РІРµС‚СЃС‚РІСѓСЋС‰РёС… РІС‹РїРѕР»РЅСЏРµРјРѕР№ РєРѕРјР°РЅРґРµ ------------------------------------------
 ----------------------------------------------------------------------------------------------------
 
 msgStart cmd arcExist =
@@ -289,49 +308,49 @@ msgStart cmd arcExist =
 
 msgStartGUI cmd arcExist =
                 case (cmd, cmdType cmd, arcExist) of
-                  ("ch", _,           _)      ->  "0433 Modifying archive %1"
+                  ("ch", _,           _)      ->  "0433 Modifying %1"
                   ("j",  _,           _)      ->  "0240 Joining archives to %1"
-                  ("d",  _,           _)      ->  "0435 Deleting files from archive %1"
-                  ("k",  _,           _)      ->  "0300 Locking archive %1"
-                  (_,    ADD_CMD,     False)  ->  "0437 Creating archive %1"
-                  (_,    ADD_CMD,     True)   ->  "0438 Updating archive %1"
-                  (_,    LIST_CMD,    _)      ->  "0439 Listing archive %1"
-                  (_,    TEST_CMD,    _)      ->  "0440 Testing archive %1"
-                  (_,    EXTRACT_CMD, _)      ->  "0441 Extracting files from archive %1"
-                  (_,    RECOVER_CMD, _)      ->  "0382 Repairing archive %1"
+                  ("d",  _,           _)      ->  "0435 Deleting from %1"
+                  ("k",  _,           _)      ->  "0300 Locking %1"
+                  (_,    ADD_CMD,     False)  ->  "0437 Creating %1"
+                  (_,    ADD_CMD,     True)   ->  "0438 Updating %1"
+                  (_,    LIST_CMD,    _)      ->  "0439 Listing %1"
+                  (_,    TEST_CMD,    _)      ->  "0440 Testing %1"
+                  (_,    EXTRACT_CMD, _)      ->  "0441 Extracting from %1"
+                  (_,    RECOVER_CMD, _)      ->  "0382 Repairing %1"
 
 msgFinishGUI cmd arcExist warnings@0 =
                 case (cmd, cmdType cmd, arcExist) of
                   ("ch", _,           _)      ->  "0238 SUCCESFULLY MODIFIED %1"
                   ("j",  _,           _)      ->  "0241 SUCCESFULLY JOINED ARCHIVES TO %1"
-                  ("d",  _,           _)      ->  "0229 FILES SUCCESFULLY DELETED FROM %1"
-                  ("k",  _,           _)      ->  "0301 SUCCESFULLY LOCKED ARCHIVE %1"
+                  ("d",  _,           _)      ->  "0229 FILES WERE SUCCESFULLY DELETED FROM %1"
+                  ("k",  _,           _)      ->  "0301 SUCCESFULLY LOCKED %1"
                   (_,    ADD_CMD,     False)  ->  "0443 SUCCESFULLY CREATED %1"
                   (_,    ADD_CMD,     True)   ->  "0444 SUCCESFULLY UPDATED %1"
                   (_,    LIST_CMD,    _)      ->  "0445 SUCCESFULLY LISTED %1"
                   (_,    TEST_CMD,    _)      ->  "0232 SUCCESFULLY TESTED %1"
-                  (_,    EXTRACT_CMD, _)      ->  "0235 FILES SUCCESFULLY EXTRACTED FROM %1"
-                  (_,    RECOVER_CMD, _)      ->  "0383 SUCCESFULLY REPAIRED ARCHIVE %1"
+                  (_,    EXTRACT_CMD, _)      ->  "0235 FILES WERE SUCCESFULLY EXTRACTED FROM %1"
+                  (_,    RECOVER_CMD, _)      ->  "0383 SUCCESFULLY REPAIRED %1"
 
 msgFinishGUI cmd arcExist warnings =
                 case (cmd, cmdType cmd, arcExist) of
                   ("ch", _,           _)      ->  "0239 %2 WARNINGS WHILE MODIFYING %1"
                   ("j",  _,           _)      ->  "0242 %2 WARNINGS WHILE JOINING ARCHIVES TO %1"
                   ("d",  _,           _)      ->  "0230 %2 WARNINGS WHILE DELETING FROM %1"
-                  ("k",  _,           _)      ->  "0302 %2 WARNINGS WHILE LOCKING ARCHIVE %1"
+                  ("k",  _,           _)      ->  "0302 %2 WARNINGS WHILE LOCKING %1"
                   (_,    ADD_CMD,     False)  ->  "0434 %2 WARNINGS WHILE CREATING %1"
                   (_,    ADD_CMD,     True)   ->  "0436 %2 WARNINGS WHILE UPDATING %1"
                   (_,    LIST_CMD,    _)      ->  "0442 %2 WARNINGS WHILE LISTING %1"
                   (_,    TEST_CMD,    _)      ->  "0233 %2 WARNINGS WHILE TESTING %1"
                   (_,    EXTRACT_CMD, _)      ->  "0236 %2 WARNINGS WHILE EXTRACTING FILES FROM %1"
-                  (_,    RECOVER_CMD, _)      ->  "0384 %2 WARNINGS WHILE REPAIRING ARCHIVE %1"
+                  (_,    RECOVER_CMD, _)      ->  "0384 %2 WARNINGS WHILE REPAIRING %1"
 
 msgDo cmd    =  case (cmdType cmd) of
-                  ADD_CMD     -> "Compressing "
-                  TEST_CMD    -> "Testing "
-                  EXTRACT_CMD -> "Extracting "
+                  ADD_CMD     -> "0480 Compressing %1"
+                  TEST_CMD    -> "0481 Testing %1"
+                  EXTRACT_CMD -> "0482 Extracting %1"
 
-msgFile      =  ("  "++).msgDo
+msgSkipping  =                   "0483 Skipping %1"
 
 msgDone cmd  =  case (cmdType cmd) of
                   ADD_CMD     -> "Compressed "
@@ -343,23 +362,60 @@ msgStat cmd  =  case (cmdType cmd) of
                   TEST_CMD    -> "Testing "
                   EXTRACT_CMD -> "Extraction "
 
--- |Напечатать "file" или "files", в зависимости от кол-ва
+-- |РќР°РїРµС‡Р°С‚Р°С‚СЊ "file" РёР»Рё "files", РІ Р·Р°РІРёСЃРёРјРѕСЃС‚Рё РѕС‚ РєРѕР»-РІР°
 show_files3 1 = "1 file"
 show_files3 n = show3 n ++ " files"
 
--- |Напечатать "archive" или "archives", в зависимости от кол-ва
+-- |РќР°РїРµС‡Р°С‚Р°С‚СЊ "archive" РёР»Рё "archives", РІ Р·Р°РІРёСЃРёРјРѕСЃС‚Рё РѕС‚ РєРѕР»-РІР°
 show_archives3 1 = "1 archive"
 show_archives3 n = show3 n ++ " archives"
 
--- |Напечатать "byte" или "bytes", в зависимости от кол-ва
+-- |РќР°РїРµС‡Р°С‚Р°С‚СЊ "byte" РёР»Рё "bytes", РІ Р·Р°РІРёСЃРёРјРѕСЃС‚Рё РѕС‚ РєРѕР»-РІР°
 show_bytes3 1 = "1 byte"
 show_bytes3 n = show3 n ++ " bytes"
 
+----------------------------------------------------------------------------------------------------
+----- External functions ---------------------------------------------------------------------------
+----------------------------------------------------------------------------------------------------
+
+-- |Win7+ taskbar: display progress indicator
+foreign import ccall safe "Compression/Common.h Taskbar_SetWindowProgressValue"
+  taskbar_SetWindowProgressValue :: Ptr () -> Word64 -> Word64 -> IO ()
+
+foreign import ccall safe "Compression/Common.h Taskbar_SetProgressValue"
+  taskbar_SetProgressValue :: Word64 -> Word64 -> IO ()
+
+-- |Win7+ taskbar: normal-state progress indicator
+foreign import ccall safe "Compression/Common.h Taskbar_Normal"
+  taskbar_Normal :: IO ()
+
+-- |Win7+ taskbar: error-state progress indicator
+foreign import ccall safe "Compression/Common.h Taskbar_Error"
+  taskbar_Error :: IO ()
+
+-- |Win7+ taskbar: pause progress indicator
+foreign import ccall safe "Compression/Common.h Taskbar_Pause"
+  taskbar_Pause :: IO ()
+
+-- |Win7+ taskbar: restore progress indicator after pause
+foreign import ccall safe "Compression/Common.h Taskbar_Resume"
+  taskbar_Resume :: IO ()
+
+-- |Win7+ taskbar: remove progress indicator
+foreign import ccall safe "Compression/Common.h Taskbar_Done"
+  taskbar_Done :: IO ()
+
+#ifdef FREEARC_WIN
+-- |Returns Windows HWND of top-level window having the provided title
+foreign import ccall safe "Compression/Common.h FindWindowHandleByTitle"
+  findWindowHandleByTitle :: Ptr CChar -> IO (Ptr ())
+#endif
+
+
 
 {-
-  Структура UI:
-  - один процесс, получающий информацию от упаковки/распаковки и определяющий структуру
-      взаимодействия с UI:
+  РЎС‚СЂСѓРєС‚СѓСЂР° UI:
+  - РѕРґРёРЅ РїСЂРѕС†РµСЃСЃ, РїРѕР»СѓС‡Р°СЋС‰РёР№ РёРЅС„РѕСЂРјР°С†РёСЋ РѕС‚ СѓРїР°РєРѕРІРєРё/СЂР°СЃРїР°РєРѕРІРєРё Рё РѕРїСЂРµРґРµР»СЏСЋС‰РёР№ СЃС‚СЂСѓРєС‚СѓСЂСѓ РІР·Р°РёРјРѕРґРµР№СЃС‚РІРёСЏ СЃ UI:
         ui_PROCESS pipe = do
           (StartCommand cmd) <- receiveP pipe
             (StartArchive cmd) <- receiveP pipe
@@ -369,5 +425,5 @@ show_bytes3 n = show3 n ++ " bytes"
             (EndArchive) <- receiveP pipe
           (EndCommand) <- receiveP pipe
          (EndProgram) <- receiveP pipe
-      Этот процесс записывает текущее состояние UI в SampleVar
+    Р­С‚РѕС‚ РїСЂРѕС†РµСЃСЃ Р·Р°РїРёСЃС‹РІР°РµС‚ С‚РµРєСѓС‰РµРµ СЃРѕСЃС‚РѕСЏРЅРёРµ UI РІ SampleVar
 -}

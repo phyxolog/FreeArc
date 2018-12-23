@@ -6,7 +6,7 @@ module FileManager where
 
 import Prelude hiding (catch)
 import Control.Concurrent
-import Control.Exception
+import Control.OldException
 import Control.Monad
 import Data.Char
 import Data.IORef
@@ -21,7 +21,8 @@ import System.Win32
 import Foreign.Ptr
 #endif
 
-import Graphics.UI.Gtk
+import Graphics.UI.Gtk   -- for gtk2hs 0.11: hiding (eventKeyName, eventModifier, eventWindowState, eventButton, eventClick)
+import Graphics.UI.Gtk.Gdk.Events
 import Graphics.UI.Gtk.ModelView as New
 
 import Utils
@@ -34,6 +35,7 @@ import Encryption
 import Options
 import Cmdline
 import UI
+import Arhive7zLib
 import ArhiveStructure
 import ArhiveDirectory
 import ArcExtract
@@ -46,24 +48,24 @@ import FileManDialogAdd
 aMAX_CMDLINE_LENGTH = 32000 `div` 4
 
 ----------------------------------------------------------------------------------------------------
----- Обработка GUI-специфичных вариаций командной строки -------------------------------------------
+---- РћР±СЂР°Р±РѕС‚РєР° GUI-СЃРїРµС†РёС„РёС‡РЅС‹С… РІР°СЂРёР°С†РёР№ РєРѕРјР°РЅРґРЅРѕР№ СЃС‚СЂРѕРєРё -------------------------------------------
 ----------------------------------------------------------------------------------------------------
 
 parseGUIcommands run args exec = do
-  let extract fm' exec cmd arcnames = extractDialog fm' exec cmd arcnames "" []
-      add     fm' exec cmd files    = addDialog     fm' exec cmd files NoMode
+  let extract fm' exec cmd arcnames = extractDialog fm' exec [] cmd arcnames "" []
+      add     fm' exec cmd files    = addDialog     fm' exec [] cmd files NoMode
   loadTranslation
   case args of
-    ["--settings-dialog"] -> openSettingsDialog               -- Диалог настроек
-    "--add-dialog":xs     -> openDialog xs exec add           -- Диалог упаковки
-    "--extract-dialog":xs -> openDialog xs exec extract       -- Диалог распаковки
-    ["--register"]        -> registerShellExtensions Nothing  -- Регистрация в Explorer
-    ["--unregister"]      -> unregisterShellExtensions        -- Удаление регистрации в Explorer
-    []                    -> myGUI run args                   -- При вызове программы без аргументов или с одним аргументом (именем каталога/архива)
-    [_]                   -> myGUI run args                   --   запускаем полноценный Archive Manager
-    _                     -> startGUI >> exec args            --   а иначе - просто отрабатываем команды (де)архивации
+    ["--settings-dialog"] -> openSettingsDialog                   -- Р”РёР°Р»РѕРі РЅР°СЃС‚СЂРѕРµРє
+    "--add-dialog":xs     -> openDialog xs exec add               -- Р”РёР°Р»РѕРі СѓРїР°РєРѕРІРєРё
+    "--extract-dialog":xs -> openDialog xs exec extract           -- Р”РёР°Р»РѕРі СЂР°СЃРїР°РєРѕРІРєРё
+    ["--register"]        -> changeRegisterShellExtensions args   -- Р РµРіРёСЃС‚СЂР°С†РёСЏ РІ Explorer
+    ["--unregister"]      -> changeRegisterShellExtensions args   -- РЈРґР°Р»РµРЅРёРµ СЂРµРіРёСЃС‚СЂР°С†РёРё РІ Explorer
+    []                    -> myGUI run args                       -- РџСЂРё РІС‹Р·РѕРІРµ РїСЂРѕРіСЂР°РјРјС‹ Р±РµР· Р°СЂРіСѓРјРµРЅС‚РѕРІ РёР»Рё СЃ РѕРґРЅРёРј Р°СЂРіСѓРјРµРЅС‚РѕРј (РёРјРµРЅРµРј РєР°С‚Р°Р»РѕРіР°/Р°СЂС…РёРІР°)
+    [_]                   -> myGUI run args                       --   Р·Р°РїСѓСЃРєР°РµРј РїРѕР»РЅРѕС†РµРЅРЅС‹Р№ Archive Manager
+    _                     -> startGUI >> exec args                --   Р° РёРЅР°С‡Рµ - РїСЂРѕСЃС‚Рѕ РѕС‚СЂР°Р±Р°С‚С‹РІР°РµРј РєРѕРјР°РЅРґС‹ (РґРµ)Р°СЂС…РёРІР°С†РёРё
 
--- Диалог настроек
+-- Р”РёР°Р»РѕРі РЅР°СЃС‚СЂРѕРµРє
 openSettingsDialog = do
   startGUI
   gui $ do
@@ -71,17 +73,20 @@ openSettingsDialog = do
     settingsDialog fm'
     mainQuit
 
--- Открыть диалог (рас)паковки и затем выполнить запрошенную команду
+-- РћС‚РєСЂС‹С‚СЊ РґРёР°Р»РѕРі (СЂР°СЃ)РїР°РєРѕРІРєРё Рё Р·Р°С‚РµРј РІС‹РїРѕР»РЅРёС‚СЊ Р·Р°РїСЂРѕС€РµРЅРЅСѓСЋ РєРѕРјР°РЅРґСѓ
 openDialog (cmd:"--":params) exec dialog = do
   startGUI
   cmdChan <- newChan
   gui $ do
-    let exec _bgmode = writeChan cmdChan
+    let exec _bgmode _use_winrar postAction cmds  =  writeChan cmdChan (cmds,postAction)
     fm' <- newEmptyFM
     dialog fm' exec cmd params
+    writeChan cmdChan ([],doNothing)  -- РїСѓСЃС‚Р°СЏ РєРѕРјР°РЅРґР° РЅР° СЃР»СѓС‡Р°Р№ РµСЃР»Рё РїРѕР»СЊР·РѕРІР°С‚РµР»СЊ РЅР°Р¶Р°Р» Cancel
   --
-  cmds <- readChan cmdChan
-  exec$ joinWith [";"] cmds
+  (cmds,postAction) <- readChan cmdChan
+  cmds &&& do
+    exec$ joinWith [";"] cmds
+    postAction True
 
 openDialog params exec dialog = do
   startGUI
@@ -89,13 +94,13 @@ openDialog params exec dialog = do
 
 
 ----------------------------------------------------------------------------------------------------
----- Главное меню программы и тулбар под ним -------------------------------------------------------
+---- Р“Р»Р°РІРЅРѕРµ РјРµРЅСЋ РїСЂРѕРіСЂР°РјРјС‹ Рё С‚СѓР»Р±Р°СЂ РїРѕРґ РЅРёРј -------------------------------------------------------
 ----------------------------------------------------------------------------------------------------
 --      File: New Archive, Open Archive, New SFX, Change Drive, Select All, Select Group, Deselect Group, Invert Selection
---      Commands (или Actions): Add, Extract, Test, ArcInfo, View, Delete, Rename
---      Tools: Wizard (если таковой будет), Protect, Comment, Convert to EXE, Encrypt, Add Recovery record, Repair
+--      Commands (РёР»Рё Actions): Add, Extract, Test, ArcInfo, View, Delete, Rename
+--      Tools: Wizard (РµСЃР»Рё С‚Р°РєРѕРІРѕР№ Р±СѓРґРµС‚), Protect, Comment, Convert to EXE, Encrypt, Add Recovery record, Repair
 --      Options: Configuration, Save settings, Load settings, View log, Clear log
---      Help: собственно сам Help, Goto Homepage (и/или Check for update), About
+--      Help: СЃРѕР±СЃС‚РІРµРЅРЅРѕ СЃР°Рј Help, Goto Homepage (Рё/РёР»Рё Check for update), About
 
 uiDef =
   "<ui>"++
@@ -116,15 +121,18 @@ uiDef =
   "      <menuitem name=\"Add\"                action=\"AddAction\" />"++
   "      <menuitem name=\"Extract\"            action=\"ExtractAction\" />"++
   "      <menuitem name=\"Test\"               action=\"TestAction\" />"++
-  "      <menuitem name=\"ArcInfo\"            action=\"ArcInfoAction\" />"++
+  "      <menuitem name=\"Info\"               action=\"InfoAction\" />"++
   "      <menuitem name=\"Delete\"             action=\"DeleteAction\" />"++
   "    </menu>"++
+#ifndef HAMSTER
   "    <menu name=\"Tools\"    action=\"ToolsAction\">"++
   "      <menuitem name=\"Lock\"               action=\"LockAction\" />"++
   "      <menuitem name=\"Comment\"            action=\"CommentAction\" />"++
   "      <menuitem name=\"Recompress\"         action=\"RecompressAction\" />"++
   "      <menuitem name=\"Convert to SFX\"     action=\"ConvertToSFXAction\" />"++
+#if defined(FREEARC_WIN)
   "      <menuitem name=\"Convert to FreeArc\" action=\"ConvertToFreeArcAction\" />"++
+#endif
   "      <separator/>"++
   "      <menuitem name=\"Encrypt\"            action=\"EncryptAction\" />"++
   "      <menuitem name=\"Protect\"            action=\"ProtectAction\" />"++
@@ -133,8 +141,10 @@ uiDef =
   "      <menuitem name=\"Modify\"             action=\"ModifyAction\" />"++
   "      <menuitem name=\"Join archives\"      action=\"JoinArchivesAction\" />"++
   "    </menu>"++
+#endif
   "    <menu name=\"Options\"  action=\"OptionsAction\">"++
   "      <menuitem name=\"Settings\"           action=\"SettingsAction\" />"++
+  "      <menuitem name=\"Change skin\"        action=\"ChangeSkinAction\" />"++
   "      <separator/>"++
   "      <menuitem name=\"ViewLog\"            action=\"ViewLogAction\" />"++
   "      <menuitem name=\"ClearLog\"           action=\"ClearLogAction\" />"++
@@ -142,7 +152,9 @@ uiDef =
   "    <menu name=\"Help\"     action=\"HelpAction\">"++
   "      <menuitem name=\"MainHelp\"           action=\"MainHelpAction\" />"++
   "      <separator/>"++
+#ifndef HAMSTER
   "      <menuitem name=\"CmdlineHelp\"        action=\"CmdlineHelpAction\" />"++
+#endif
   "      <menuitem name=\"OpenHomepage\"       action=\"OpenHomepageAction\" />"++
   "      <menuitem name=\"OpenForum\"          action=\"OpenForumAction\" />"++
   "      <menuitem name=\"CheckForUpdate\"     action=\"CheckForUpdateAction\" />"++
@@ -157,14 +169,16 @@ uiDef =
   "      <toolitem name=\"Add\"                action=\"AddAction\" />"++
   "      <toolitem name=\"Extract\"            action=\"ExtractAction\" />"++
   "      <toolitem name=\"Test\"               action=\"TestAction\" />"++
-  "      <toolitem name=\"ArcInfo\"            action=\"ArcInfoAction\" />"++
+  "      <toolitem name=\"Info\"               action=\"InfoAction\" />"++
   "      <toolitem name=\"Delete\"             action=\"DeleteAction\" />"++
   "      <separator/>"++
+#ifndef HAMSTER
   "      <toolitem name=\"Lock\"               action=\"LockAction\" />"++
   "      <toolitem name=\"Recompress\"         action=\"RecompressAction\" />"++
   "      <toolitem name=\"Convert to SFX\"     action=\"ConvertToSFXAction\" />"++
   "      <toolitem name=\"Join archives\"      action=\"JoinArchivesAction\" />"++
   "      <separator/>"++
+#endif
   "      <toolitem name=\"Refresh\"            action=\"RefreshAction\" />"++
   "    </placeholder>"++
   "  </toolbar>"++
@@ -172,21 +186,22 @@ uiDef =
 
 
 ----------------------------------------------------------------------------------------------------
----- Визуальная часть файл-менеджера ---------------------------------------------------------------
+---- Р’РёР·СѓР°Р»СЊРЅР°СЏ С‡Р°СЃС‚СЊ С„Р°Р№Р»-РјРµРЅРµРґР¶РµСЂР° ---------------------------------------------------------------
 ----------------------------------------------------------------------------------------------------
 
 myGUI run args = do
   fileManagerMode =: True
   runGUI $ do
-  parseCmdline ["l", "a"]   -- инициализация: display, логфайл
-  -- Список ассоциаций клавиша->действие
+  cmds <- parseCmdline ["l", "a"]   -- РёРЅРёС†РёР°Р»РёР·Р°С†РёСЏ: display, Р»РѕРіС„Р°Р№Р»...
+  for cmds cmd_setup_command        --   ... tempdir
+  -- РЎРїРёСЃРѕРє Р°СЃСЃРѕС†РёР°С†РёР№ РєР»Р°РІРёС€Р°->РґРµР№СЃС‚РІРёРµ
   onKeyActions <- newList
   let onKey = curry (onKeyActions <<=)
-  -- Создадим окно индикатора прогресса и загрузим настройки/локализацию
+  -- РЎРѕР·РґР°РґРёРј РѕРєРЅРѕ РёРЅРґРёРєР°С‚РѕСЂР° РїСЂРѕРіСЂРµСЃСЃР° Рё Р·Р°РіСЂСѓР·РёРј РЅР°СЃС‚СЂРѕР№РєРё/Р»РѕРєР°Р»РёР·Р°С†РёСЋ
   (windowProgress, (clearMessageBox,showMessageBox)) <- runIndicators
   -- Main menu
   standardGroup <- actionGroupNew "standard"
-  let action name  =  (concat$ map (mapHead toUpper)$ words$ drop 5 name)++"Action"   -- "9999 the name" -> "TheNameAction"
+  let action name  =  (concat$ map (mapHead toUpper)$ words$ i18no name)++"Action"   -- "9999 the name" -> "TheNameAction"
   let names = split ',' "0050 File,0258 Commands,0259 Tools,0260 Options,0261 Help"
   for names $ \name -> do
     label <- i18n name
@@ -211,14 +226,14 @@ myGUI run args = do
   addAct      <- anew "0030 Add"                 "0040 Add files to archive(s)"                   (Just stockMediaRecord)     "<Alt>A"
   extractAct  <- anew "0035 Extract"             "0045 Extract files from archive(s)"             (Just stockMediaPlay)       "<Alt>E"
   testAct     <- anew "0034 Test"                "0044 Test files in archive(s)"                  (Just stockSpellCheck)      "<Alt>T"
-  arcinfoAct  <- anew "0086 ArcInfo"             "0087 Information about archive"                 (Just stockInfo)            "<Alt>I"
+  arcinfoAct  <- anew "0086 Info"                "0087 Information about archive"                 (Just stockInfo)            "<Alt>I"
   deleteAct   <- anew "0033 Delete"              "0043 Delete files (from archive)"               (Just stockDelete)          "Delete"
 
   lockAct     <- anew "0266 Lock"                "0267 Lock archive from further changes"         (Just stockDialogAuthentication) "<Alt>L"
   commentAct  <- anew "0268 Comment"             "0269 Edit archive comment"                      (Just stockEdit)            "<Alt>C"
   recompressAct<-anew "0293 Recompress"          "0294 Recompress files in archive"               (Just stockGotoBottom)      "<Alt>R"
   toSfxAct    <- anew "0270 Convert to SFX"      "0271 Convert archive to SFX"                    (Just stockConvert)         "<Alt>S"
-  toFaAct     <- anew "0426 Convert to FreeArc"  "0427 Convert foreign archive to FreeArc format" (Nothing)                   ""
+  toFaAct     <- anew("0426 Convert to "++aFreeArc) ("0427 Convert foreign archive to "++aFreeArc++" format") (Nothing)       ""
   encryptAct  <- anew "0272 Encrypt"             "0273 Encrypt archive contents"                  (Nothing)                   ""
   addRrAct    <- anew "0274 Protect"             "0275 Add Recovery record to archive"            (Nothing)                   "<Alt>P"
   repairAct   <- anew "0379 Repair"              "0380 Repair damaged archive"                    (Nothing)                   ""
@@ -226,11 +241,12 @@ myGUI run args = do
   joinAct     <- anew "0032 Join archives"       "0042 Join archives together"                    (Just stockCopy)            "<Alt>J"
 
   settingsAct <- anew "0064 Settings"            "0065 Edit program settings"                     (Just stockPreferences)     ""
+  changeSkinAct<-anew "0487 Change skin"         "0488 Change program skin"                       (Nothing)                   ""
   viewLogAct  <- anew "0276 View log"            "0277 View logfile"                              (Nothing)                   ""
   clearLogAct <- anew "0278 Clear log"           "0279 Clear logfile"                             (Nothing)                   ""
 
-  helpAct     <- anew "0280 Main help"           "0281 Help on using FreeArc"                     (Just stockHelp)            "F1"
-  helpCmdAct  <- anew "0282 Cmdline help"        "0283 Help on FreeArc command line"              (Just stockHelp)            ""
+  helpAct     <- anew "0280 Main help"          ("0281 Help on using "++aFreeArc)                        (Just stockHelp)            "F1"
+  helpCmdAct  <- anew "0282 Cmdline help"       ("0283 Help on "++aFreeArc++" command line")             (Just stockHelp)            ""
   homepageAct <- anew "0284 Open Homepage"       "0285 Open program site"                         (Just stockHome)            ""
   openForumAct<- anew "0373 Open forum"          "0374 Open program forum"                        (Nothing)                   ""
   openWikiAct <- anew "0375 Open wiki"           "0376 Open program wiki"                         (Nothing)                   ""
@@ -261,37 +277,40 @@ myGUI run args = do
   boxPackStart lowBox messageCombo PackGrow    2
   --boxPackStart lowBox statusbar    PackNatural 0
 
-  -- Создадим переменную для хранения текущего состояния файл-менеджера
+  -- РЎРѕР·РґР°РґРёРј РїРµСЂРµРјРµРЅРЅСѓСЋ РґР»СЏ С…СЂР°РЅРµРЅРёСЏ С‚РµРєСѓС‰РµРіРѕ СЃРѕСЃС‚РѕСЏРЅРёСЏ С„Р°Р№Р»-РјРµРЅРµРґР¶РµСЂР°
   fm' <- newFM window listView listModel listSelection statusLabel messageCombo
-  fmUpdateConfigFiles fm'
 
-  -- Отрихтуем тулбар
+  -- Configure grid lines in the filelist
+  gridLines <- fmGetHistoryBool fm' "HorizontalGridLines" False
+  set listView [treeViewEnableGridLines := if gridLines then TreeViewGridLinesHorizontal else TreeViewGridLinesNone]
+
+  -- РћС‚СЂРёС…С‚СѓРµРј С‚СѓР»Р±Р°СЂ
   let toolbar = castToToolbar toolBar
   toolbarCaptions <- fmGetHistoryBool fm' "ToolbarCaptions" True
   toolbar `set` [toolbarStyle := if toolbarCaptions then ToolbarBoth else ToolbarIcons]
-  toolbar `toolbarSetIconSize` iconSizeLargeToolbar
+  toolbar `toolbarSetIconSize` IconSizeLargeToolbar
   n <- toolbarGetNItems toolbar
   for [0..n-1] $ \i -> do
     Just button <- toolbarGetNthItem toolbar i
     toolItemSetHomogeneous button False
 
-  -- Полоска навигации
+  -- РџРѕР»РѕСЃРєР° РЅР°РІРёРіР°С†РёРё
   naviBar  <- hBoxNew False 0
   upButton <- button "0006   Up  "
   curdir   <- fmEntryWithHistory fm' "dir/arcname" (const$ return True) (fmCanonicalizePath fm')
   saveDirButton <- button "0007   Save  "
   boxPackStart naviBar (widget upButton)       PackNatural 0
 #if defined(FREEARC_WIN)
-  -- Меню выбора диска
+  -- РњРµРЅСЋ РІС‹Р±РѕСЂР° РґРёСЃРєР°
   driveButton <- button "C:"
-  driveMenu   <- makePopupMenu (chdir fm'.(++"\\").head.words) =<< getDrives
+  driveMenu   <- makePopupMenu (fmChdir fm'.(++"\\").head.words) =<< getDrives
   driveButton `onClick` (widgetShowAll driveMenu >> menuPopup driveMenu Nothing)
   boxPackStart naviBar (widget driveButton)    PackNatural 0
 #endif
   boxPackStart naviBar (widget curdir)         PackGrow    0
   boxPackStart naviBar (widget saveDirButton)  PackNatural 0
 
-  -- Целиком окно файл-менеджера
+  -- Р¦РµР»РёРєРѕРј РѕРєРЅРѕ С„Р°Р№Р»-РјРµРЅРµРґР¶РµСЂР°
   vBox <- vBoxNew False 0
   set vBox [boxHomogeneous := False]
   boxPackStart vBox menuBar   PackNatural 0
@@ -303,10 +322,10 @@ myGUI run args = do
   containerAdd window vBox
 
 
-  -- Список действий, выполняемых при закрытии окна файл-менеджера
+  -- РЎРїРёСЃРѕРє РґРµР№СЃС‚РІРёР№, РІС‹РїРѕР»РЅСЏРµРјС‹С… РїСЂРё Р·Р°РєСЂС‹С‚РёРё РѕРєРЅР° С„Р°Р№Р»-РјРµРЅРµРґР¶РµСЂР°
   onExit <- newList
 
-  -- Список ассоциаций клавиша->действие
+  -- РЎРїРёСЃРѕРє Р°СЃСЃРѕС†РёР°С†РёР№ РєР»Р°РІРёС€Р°->РґРµР№СЃС‚РІРёРµ
   listView `onKeyPress` \event -> do
     x <- lookup (eventKey event) `fmap` listVal onKeyActions
     case x of
@@ -315,7 +334,7 @@ myGUI run args = do
 
 
 ----------------------------------------------------------------------------------------------------
----- Сохранение/восстановление размера и положения главного окна и колонок в нём -------------------
+---- РЎРѕС…СЂР°РЅРµРЅРёРµ/РІРѕСЃСЃС‚Р°РЅРѕРІР»РµРЅРёРµ СЂР°Р·РјРµСЂР° Рё РїРѕР»РѕР¶РµРЅРёСЏ РіР»Р°РІРЅРѕРіРѕ РѕРєРЅР° Рё РєРѕР»РѕРЅРѕРє РІ РЅС‘Рј -------------------
 ----------------------------------------------------------------------------------------------------
 
   window `windowSetPosition` WinPosCenter
@@ -325,15 +344,15 @@ myGUI run args = do
   --window `windowSetPosition` WinPosNone
   --windowSetDefaultSize window 200 100
 
-  -- При старте восстановим сохранённый размер окна
+  -- РџСЂРё СЃС‚Р°СЂС‚Рµ РІРѕСЃСЃС‚Р°РЅРѕРІРёРј СЃРѕС…СЂР°РЅС‘РЅРЅС‹Р№ СЂР°Р·РјРµСЂ РѕРєРЅР°
   fmRestoreSizePos fm' window "MainWindow" "-10000 -10000 720 500"
 
-  -- Сохраним размер и положение главного окна после его перемещения
+  -- РЎРѕС…СЂР°РЅРёРј СЂР°Р·РјРµСЂ Рё РїРѕР»РѕР¶РµРЅРёРµ РіР»Р°РІРЅРѕРіРѕ РѕРєРЅР° РїРѕСЃР»Рµ РµРіРѕ РїРµСЂРµРјРµС‰РµРЅРёСЏ
   window `onConfigure` \e -> do
     fmSaveSizePos fm' window "MainWindow"
     return False
 
-  -- Запомним, было ли окно максимизировано
+  -- Р—Р°РїРѕРјРЅРёРј, Р±С‹Р»Рѕ Р»Рё РѕРєРЅРѕ РјР°РєСЃРёРјРёР·РёСЂРѕРІР°РЅРѕ
   window `onWindowState` \e -> do
     let isMax x = case x of
                     WindowStateMaximized -> True
@@ -341,135 +360,172 @@ myGUI run args = do
     fmSaveMaximized fm' "MainWindow" (any isMax (eventWindowState e))
     return False
 
-
-  -- При закрытии программы сохраним порядок и ширину колонок
-  onExit <<= do
-    colnames  <-  New.treeViewGetColumns listView  >>=  mapM New.treeViewColumnGetTitle
-    fmReplaceHistory fm' "ColumnOrder" (unwords$ catMaybes colnames)
-    for columns $ \(name,col1) -> do
-      w <- New.treeViewColumnGetWidth col1
-      fmReplaceHistory fm' (name++"ColumnWidth") (show w)
-
-  -- При старте восстановим сохранённые порядок и ширину колонок
-  order <- (reverse.words) `fmap` fmGetHistory1 fm' "ColumnOrder" ""
-  for order $ \colname -> do
-    whenJust (lookup colname columns) $
-      New.treeViewMoveColumnFirst listView
-  for columns $ \(name,col1) -> do
-    w <- readInt  `fmap`  fmGetHistory1 fm' (name++"ColumnWidth") "150"
-    New.treeViewColumnSetFixedWidth col1 w
+  -- РџСЂРё Р·Р°РєСЂС‹С‚РёРё РїСЂРѕРіСЂР°РјРјС‹ СЃРѕС…СЂР°РЅРёРј РїРѕСЂСЏРґРѕРє Рё С€РёСЂРёРЅСѓ РєРѕР»РѕРЅРѕРє, РїСЂРё СЃС‚Р°СЂС‚Рµ РІРѕСЃСЃС‚Р°РЅРѕРІРёРј РёС…
+  onExit <<= saveColumnsOrderAndWidths fm' "FileManager" listView columns
+  restoreColumnsOrderAndWidths         fm' "FileManager" listView columns
 
 
 ----------------------------------------------------------------------------------------------------
----- Навигационная часть файл-менеджера ------------------------------------------------------------
+---- РќР°РІРёРіР°С†РёРѕРЅРЅР°СЏ С‡Р°СЃС‚СЊ С„Р°Р№Р»-РјРµРЅРµРґР¶РµСЂР° ------------------------------------------------------------
 ----------------------------------------------------------------------------------------------------
 
 --  for [upButton,saveDirButton] (`buttonSetFocusOnClick` False)
 
-  -- Выводить errors/warnings/messages внизу окна FreeArc
+  -- Р’С‹РІРѕРґРёС‚СЊ errors/warnings/messages РІРЅРёР·Сѓ РѕРєРЅР° FreeArc
   showErrors' <- ref True
   errorHandlers   ++= [whenM (val showErrors') . condPrintLineLn "w"]
   errorHandlers   ++= [whenM (val showErrors') . postGUIAsync . fmStackMsg fm']
   warningHandlers ++= [whenM (val showErrors') . postGUIAsync . fmStackMsg fm']
   loggingHandlers ++= [postGUIAsync . fmStackMsg fm']
 
-  -- Отключает вывод сообщений об ошибках на время выполнения action
+  -- РћС‚РєР»СЋС‡Р°РµС‚ РІС‹РІРѕРґ СЃРѕРѕР±С‰РµРЅРёР№ РѕР± РѕС€РёР±РєР°С… РЅР° РІСЂРµРјСЏ РІС‹РїРѕР»РЅРµРЅРёСЏ action
   let hideErrors action  =  bracket (showErrors' <=> False)  (showErrors' =: )  (\_ -> action)
 
-  -- Перехват и обработка ошибок
+  -- РџРµСЂРµС…РІР°С‚ Рё РѕР±СЂР°Р±РѕС‚РєР° РѕС€РёР±РѕРє
   errorMsg <- ref ""
   errorHandlers ++= [(errorMsg =:)]
   let withErrorHandler onError = handle$ \e->do operationTerminated =: False
                                                 fmErrorMsg fm' =<< val errorMsg
                                                 sequence_ onError
-  -- При возникновении ошибки выдать её пользователю
+  -- РџСЂРё РІРѕР·РЅРёРєРЅРѕРІРµРЅРёРё РѕС€РёР±РєРё РІС‹РґР°С‚СЊ РµС‘ РїРѕР»СЊР·РѕРІР°С‚РµР»СЋ
   let msgboxOnError = withErrorHandler []
-  -- При возникновении ошибки выдать её пользователю и заверщить выполнение программы
+  -- РџСЂРё РІРѕР·РЅРёРєРЅРѕРІРµРЅРёРё РѕС€РёР±РєРё РІС‹РґР°С‚СЊ РµС‘ РїРѕР»СЊР·РѕРІР°С‚РµР»СЋ Рё Р·Р°РІРµСЂС‰РёС‚СЊ РІС‹РїРѕР»РЅРµРЅРёРµ РїСЂРѕРіСЂР°РјРјС‹
   let terminateOnError = withErrorHandler [shutdown "" aEXIT_CODE_FATAL_ERROR]
 
-
-  -- Перейти в заданный каталог/архив или выполнить команду
-  let select filename = do
-        fm <- val fm'
-        handle (\e -> (operationTerminated =: False) >> runFile filename (fm_curdir fm) False) $ do    -- при неудаче перехода запустим файл :)
-          hideErrors $ do
-            chdir fm' filename
-            New.treeViewScrollToPoint (fm_view fm) 0 0
-            --New.treeViewSetCursor (fm_view fm) [0] Nothing
-
-  -- Переход в родительский каталог
+  -- РџРµСЂРµС…РѕРґ РІ СЂРѕРґРёС‚РµР»СЊСЃРєРёР№ РєР°С‚Р°Р»РѕРі
   let goParentDir = do
         fm <- val fm'
-        unless (isFM_Archive fm  &&  isURL(fm_arcname fm)  &&  fm_arcdir fm=="") $ do  -- Запретить Up из архива в инете
-        chdir fm' ".."
-        -- Выбираем каталог/архив, из которого мы только что вышли
+        unless (isFM_Archive fm  &&  isURL(fm_arcname fm)  &&  fm_arcdir fm=="") $ do  -- Р—Р°РїСЂРµС‚РёС‚СЊ Up РёР· Р°СЂС…РёРІР° РІ РёРЅРµС‚Рµ
+        fmChdir fm' ".."
+        -- Р’С‹Р±РёСЂР°РµРј РєР°С‚Р°Р»РѕРі/Р°СЂС…РёРІ, РёР· РєРѕС‚РѕСЂРѕРіРѕ РјС‹ С‚РѕР»СЊРєРѕ С‡С‚Рѕ РІС‹С€Р»Рё
         fmSetCursor fm' (takeFileName$ fm_current fm)
 
-  -- Запись текущего каталога в историю
+  -- РџРµСЂРµС…РѕРґ РІ РєРѕСЂРЅРµРІРѕР№ РєР°С‚Р°Р»РѕРі
+  let goRootDir = fmChdir fm' "/"
+
+  -- РџРѕС‚РѕРє РєРѕРјР°РЅРґ СЂР°Р±РѕС‚С‹ СЃ Р°СЂС…РёРІР°РјРё
+  cmdChan <- newChan
+
+  -- Р—Р°РїСѓСЃРє С„Р°Р№Р»Р° СЃ РґРёСЃРєР°/РёР· Р°СЂС…РёРІР°
+  let runme filename useFA = do
+        fm <- val fm'
+        if not(isFM_Archive fm)  then runFile filename (fm_curdir fm) False  else do
+        forkIO_ $ do
+        withTempDir $ \tempdir -> do
+          patterns <- fmGetHistory1 fm' "ExtractAllFor" "" >>== split_by_any " \t,;"
+          decryptionOptions <- fmGetDecryptionOptions fm'
+          let extract_all = any (filenameLower filename ~=) patterns                   -- True, РµСЃР»Рё РЅР°РґРѕ РёР·РІР»РµС‡СЊ РІСЃРµ С„Р°Р№Р»С‹ РёР· Р°СЂС…РёРІР° (РґР»СЏ Р·Р°РїСѓСЃРєР° exe/htm...)
+              cmd         = ["x", "-dp"++tempdir, "-fn"]++decryptionOptions++["--", fm_arcname fm]
+                              ++ (not extract_all  &&&  [fm_arcdir fm </> filename])   -- РёРјСЏ РёР·РІР»РµРєР°РµРјРѕРіРѕ С„Р°Р№Р»Р°, РµСЃР»Рё РЅСѓР¶РµРЅ С‚РѕР»СЊРєРѕ РѕРЅ СЃР°Рј
+          successful <- newEmptyMVar
+          writeChan cmdChan ([cmd], putMVar successful)
+          whenM (takeMVar successful) $ do  -- Р·Р°РїСѓСЃС‚РёС‚СЊ С„Р°Р№Р» С‚РѕР»СЊРєРѕ РµСЃР»Рё РєРѕРјР°РЅРґР° РёР·РІР»РµС‡РµРЅРёСЏ Р·Р°РІРµСЂС€РµРЅР° Р±РµР· РѕС€РёР±РєРё
+            if useFA then do freearc <- getExeName
+                             let full_cmd = unparseCommand [freearc,filename]
+                             Files.runCommand full_cmd (tempdir </> fm_arcdir fm) True
+
+                     else do runFile filename (tempdir </> fm_arcdir fm) True
+            -- РќРµРєРѕС‚РѕСЂС‹Рµ РїСЂРѕСЃРјРѕС‚СЂС‰РёРєРё Р·Р°РїСѓСЃРєР°СЋС‚ Р°СЃРёРЅС…СЂРѕРЅРЅРѕРЅРѕ РґСЂСѓРіРѕР№ .exe РґР»СЏ РѕС‚РєСЂС‹С‚РёСЏ С„Р°Р№Р»Р°, РЅР° СЌС‚РѕС‚ СЃР»СѓС‡Р°Р№ РЅРµРјРЅРѕРіРѕ РїРѕРґРѕР¶РґС‘Рј РїСЂРµР¶РґРµ С‡РµРј СЃС‚РёСЂР°С‚СЊ РµРіРѕ
+            sleepSeconds 10
+            -- to do: if file was modified - ask user whether to put it back to archive
+
+
+  let -- РџРµСЂРµР№С‚Рё РІ Р·Р°РґР°РЅРЅС‹Р№ РєР°С‚Р°Р»РѕРі/Р°СЂС…РёРІ
+      select filename = select' filename False
+
+      -- РџРµСЂРµР№С‚Рё РІ Р·Р°РґР°РЅРЅС‹Р№ РєР°С‚Р°Р»РѕРі/Р°СЂС…РёРІ РёР»Рё РІС‹РїРѕР»РЅРёС‚СЊ РєРѕРјР°РЅРґСѓ
+      select_or_run filename = do
+        patterns <- fmGetHistory1 fm' "RunFor" "" >>== split_by_any " \t,;"    -- РёРјРµРЅР° С„Р°Р№Р»РѕРІ, РєРѕС‚РѕСЂС‹Рµ РЅР°РґРѕ СЃСЂР°Р·Сѓ Р·Р°РїСѓСЃРєР°С‚СЊ, РЅРµ РїС‹С‚Р°СЏСЃСЊ РѕС‚РєСЂС‹С‚СЊ РёС… РєР°Рє Р°СЂС…РёРІС‹
+        if (any (filenameLower filename ~=) patterns)
+          then runme filename False
+          else select' filename True
+
+      select' filename allow_run = do
+        handle (\e -> (operationTerminated =: False) >> (allow_run &&& runme filename False)) $ do           -- РїСЂРё РЅРµСѓРґР°С‡Рµ РїРµСЂРµС…РѕРґР° Р·Р°РїСѓСЃС‚РёРј С„Р°Р№Р» :)
+          hideErrors $ do
+            fmChdir fm' filename
+            -- Р•СЃР»Рё СЌС‚Рѕ Р°СЂС…РёРІ РІ СЃС‚РёР»Рµ .tar.gz, С‚Рѕ СЃСЂР°Р·Сѓ РѕС‚РєСЂРѕРµРј РІРЅСѓС‚СЂРµРЅРЅРёР№ Р°СЂС…РёРІ
+            quickOpenTarGz <- fmGetHistoryBool fm' "QuickOpenTarGz" True
+            fm <- val fm'
+            let dir = take 2 (arcDirectory (fm_archive fm))
+                filename = storedName(cfFileInfo(dir!!0))
+            if quickOpenTarGz  &&  (isFM_Archive fm)  &&  (arcArchiveType(fm_archive fm) `elem` words "bzip2 gzip xz Z lzma lzma86")
+                &&  (length dir == 1)  &&  (filenameLower(takeExtension(filename)) `elem` words ".tar .cpio")
+              then runme filename True >> goParentDir
+              else New.treeViewScrollToPoint (fm_view fm) 0 0   -- РёРЅР°С‡Рµ РїРѕСЃС‚Р°РІРёРј РєСѓСЂСЃРѕСЂ РЅР° РїРµСЂРІС‹Р№ С„Р°Р№Р» РІ РєР°С‚Р°Р»РѕРіРµ, РєСѓРґР° РјС‹ РїРµСЂРµС€Р»Рё
+
+
+  -- Р—Р°РїРёСЃСЊ С‚РµРєСѓС‰РµРіРѕ РєР°С‚Р°Р»РѕРіР° РІ РёСЃС‚РѕСЂРёСЋ
   let saveCurdirToHistory = do
         fm <- val fm'
         fmAddHistory fm' (isFM_Archive fm.$bool "dir" "arcname") =<< fmCanonicalizePath fm' =<< val curdir
 
 
-  -- При нажатии Enter на строке в списке открываем выбранный архив/каталог
+  -- РџСЂРё РЅР°Р¶Р°С‚РёРё Enter РЅР° СЃС‚СЂРѕРєРµ РІ СЃРїРёСЃРєРµ РѕС‚РєСЂС‹РІР°РµРј РІС‹Р±СЂР°РЅРЅС‹Р№ Р°СЂС…РёРІ/РєР°С‚Р°Р»РѕРі
   listView `New.onRowActivated` \path column -> do
     fm <- val fm'
     file <- fmFileAt fm' path
-    unless (isFM_Archive fm  &&  not(fdIsDir file)) $ do  -- Run command don't yet work directly from archives
-    select (fmname file)
+    select_or_run (fmname file)
 
-  -- При single-click на свободном пространстве справа/снизу снимаем отметку со всех файлов,
-  -- при double-click там же выбираем все файлы
+  -- Р’РІРµСЂС… Рё РІРЅРёР· РїРѕ РёРµСЂР°СЂС…РёРё (FAR-style keys)
+  "<Ctrl>Page_Up"   `onKey` goParentDir
+  "<Ctrl>Page_Down" `onKey` do select =<< fmGetCursor fm'
+
+
+  -- РџСЂРё single-click РЅР° СЃРІРѕР±РѕРґРЅРѕРј РїСЂРѕСЃС‚СЂР°РЅСЃС‚РІРµ СЃРїСЂР°РІР°/СЃРЅРёР·Сѓ СЃРЅРёРјР°РµРј РѕС‚РјРµС‚РєСѓ СЃРѕ РІСЃРµС… С„Р°Р№Р»РѕРІ,
+  -- РїСЂРё double-click С‚Р°Рј Р¶Рµ РІС‹Р±РёСЂР°РµРј РІСЃРµ С„Р°Р№Р»С‹
   listView `onButtonPress` \e -> do
     path <- New.treeViewGetPathAtPos listView (round$ eventX e, round$ eventY e)
     coltitle <- case path of
                   Just (_,column,_) -> New.treeViewColumnGetTitle column >>== fromMaybe ""
                   _                 -> return ""
-    -- Пустая строка в coltitle означает клик за пределами списка файлов
+    -- РџСѓСЃС‚Р°СЏ СЃС‚СЂРѕРєР° РІ coltitle РѕР·РЅР°С‡Р°РµС‚ РєР»РёРє Р·Р° РїСЂРµРґРµР»Р°РјРё СЃРїРёСЃРєР° С„Р°Р№Р»РѕРІ
     coltitle=="" &&& e.$eventButton==LeftButton &&&
       ((if e.$eventClick==SingleClick  then fmUnselectAll  else fmSelectAll) fm'  >>  return True)
 
-  -- При переходе в другой каталог/архив отобразить его имя в строке ввода
+  -- РџСЂРё РїРµСЂРµС…РѕРґРµ РІ РґСЂСѓРіРѕР№ РєР°С‚Р°Р»РѕРі/Р°СЂС…РёРІ РѕС‚РѕР±СЂР°Р·РёС‚СЊ РµРіРѕ РёРјСЏ РІ СЃС‚СЂРѕРєРµ РІРІРѕРґР°
   fm' `fmOnChdir` do
     fm <- val fm'
     curdir =: fm_current fm
-    -- Сохраняем в историю имена архивов
+    -- РЎРѕС…СЂР°РЅСЏРµРј РІ РёСЃС‚РѕСЂРёСЋ РёРјРµРЅР° Р°СЂС…РёРІРѕРІ
     isFM_Archive fm  &&&  fm_arcdir fm==""  &&&  saveCurdirToHistory
-    -- Перечитаем историю с диска
+    -- РџРµСЂРµС‡РёС‚Р°РµРј РёСЃС‚РѕСЂРёСЋ СЃ РґРёСЃРєР°
     rereadHistory curdir
 
-  -- При переходе в другой каталог/архив - отобразить его имя в заголовке окна
+  -- РџСЂРё РїРµСЂРµС…РѕРґРµ РІ РґСЂСѓРіРѕР№ РєР°С‚Р°Р»РѕРі/Р°СЂС…РёРІ - РѕС‚РѕР±СЂР°Р·РёС‚СЊ РµРіРѕ РёРјСЏ РІ Р·Р°РіРѕР»РѕРІРєРµ РѕРєРЅР°
   fm' `fmOnChdir` do
     fm <- val fm'
     let title | isFM_Archive fm  =  takeFileName (fm_arcname fm) </> fm_arcdir fm
-              | otherwise        =  takeFileName (fm_dir fm)  |||  fm_dir fm
+              | otherwise        =  fm_dir fm
     set (fm_window fm) [windowTitle := title++" - "++aARC_NAME]
 
-  -- Переходим в род. каталог по кнопке Up или нажатию BackSpace в списке файлов
+  -- РџРµСЂРµС…РѕРґРёРј РІ СЂРѕРґ. РєР°С‚Р°Р»РѕРі РїРѕ РєРЅРѕРїРєРµ Up РёР»Рё РЅР°Р¶Р°С‚РёСЋ BackSpace РІ СЃРїРёСЃРєРµ С„Р°Р№Р»РѕРІ
   upButton  `onClick` goParentDir
   "BackSpace" `onKey` goParentDir
+  -- "<Ctrl>BackSlash"  `onKey` goRootDir
 
-  -- Сохранение выбранного архива/каталога в истории
+  -- РЎРѕС…СЂР°РЅРµРЅРёРµ РІС‹Р±СЂР°РЅРЅРѕРіРѕ Р°СЂС…РёРІР°/РєР°С‚Р°Р»РѕРіР° РІ РёСЃС‚РѕСЂРёРё
   saveDirButton `onClick` do
     saveCurdirToHistory
 
-  -- Открытие другого каталога или архива (Enter в строке ввода)
+  -- РћС‚РєСЂС‹С‚РёРµ РґСЂСѓРіРѕРіРѕ РєР°С‚Р°Р»РѕРіР° РёР»Рё Р°СЂС…РёРІР° (Enter РІ СЃС‚СЂРѕРєРµ РІРІРѕРґР°)
   entry curdir `onEntryActivate` do
     saveCurdirToHistory
-    select =<< val curdir
+    select_or_run =<< val curdir
 
-  -- Открытие другого каталога или архива (выбор из истории)
-  widget curdir `New.onChanged` do
-    whenJustM_ (New.comboBoxGetActive$ widget curdir) $ \_ -> do
-    saveCurdirToHistory
-    select =<< val curdir
+  -- РћС‚РєСЂС‹С‚РёРµ РґСЂСѓРіРѕРіРѕ РєР°С‚Р°Р»РѕРіР° РёР»Рё Р°СЂС…РёРІР° (РІС‹Р±РѕСЂ РёР· РёСЃС‚РѕСЂРёРё)
+  on (widget curdir) changed $ do
+    choice <- New.comboBoxGetActive (widget curdir)
+    when (choice /= -1) $ do
+      saveCurdirToHistory
+      select_or_run =<< val curdir
 
-  -- Выполнить action над файлами, состоящими в соотношении makeRE с именем файла под курсором
+  -- Р’С‹РїРѕР»РЅРёС‚СЊ action РЅР°Рґ С„Р°Р№Р»Р°РјРё, СЃРѕСЃС‚РѕСЏС‰РёРјРё РІ СЃРѕРѕС‚РЅРѕС€РµРЅРёРё makeRE СЃ РёРјРµРЅРµРј С„Р°Р№Р»Р° РїРѕРґ РєСѓСЂСЃРѕСЂРѕРј
   let byFile action makeRE = do
         filename <- fmGetCursor fm'
         action fm' ((match$ makeRE filename).fdBasename)
 
-  -- Клавиши Shift/Ctrl/Alt-Plus/Minus с теми же операциями как в FAR
+  -- РљР»Р°РІРёС€Рё Shift/Ctrl/Alt-Plus/Minus СЃ С‚РµРјРё Р¶Рµ РѕРїРµСЂР°С†РёСЏРјРё РєР°Рє РІ FAR
   "<Shift>KP_Add"      `onKey` fmSelectAll   fm'
   "<Shift>KP_Subtract" `onKey` fmUnselectAll fm'
   "<Ctrl>KP_Add"       `onKey` byFile fmSelectFilenames   (("*" ++).takeExtension)
@@ -478,35 +534,36 @@ myGUI run args = do
   "<Alt>KP_Subtract"   `onKey` byFile fmUnselectFilenames ((++".*").dropExtension)
 
 
-  -- При нажатии заголовка столбца в списке файлов - сортировать по этому столбцу
-  --   (при повторном нажатии - сортировать в обратном порядке)
+  -- РџСЂРё РЅР°Р¶Р°С‚РёРё Р·Р°РіРѕР»РѕРІРєР° СЃС‚РѕР»Р±С†Р° РІ СЃРїРёСЃРєРµ С„Р°Р№Р»РѕРІ - СЃРѕСЂС‚РёСЂРѕРІР°С‚СЊ РїРѕ СЌС‚РѕРјСѓ СЃС‚РѕР»Р±С†Сѓ
+  --   (РїСЂРё РїРѕРІС‚РѕСЂРЅРѕРј РЅР°Р¶Р°С‚РёРё - СЃРѕСЂС‚РёСЂРѕРІР°С‚СЊ РІ РѕР±СЂР°С‚РЅРѕРј РїРѕСЂСЏРґРєРµ)
   onColumnTitleClicked =: \column -> do
     fmModifySortOrder fm' (showSortOrder columns) (calcNewSortOrder column)
     refreshCommand fm'
-    fmSaveSortOrder  fm' =<< fmGetSortOrder fm'  -- запишем в конфиг порядок сортировки
+    fmSaveSortOrder  fm' =<< fmGetSortOrder fm'  -- Р·Р°РїРёС€РµРј РІ РєРѕРЅС„РёРі РїРѕСЂСЏРґРѕРє СЃРѕСЂС‚РёСЂРѕРІРєРё
 
-  -- Отсортируем файлы по сохранённому критерию
+  -- РћС‚СЃРѕСЂС‚РёСЂСѓРµРј С„Р°Р№Р»С‹ РїРѕ СЃРѕС…СЂР°РЅС‘РЅРЅРѕРјСѓ РєСЂРёС‚РµСЂРёСЋ
   fmSetSortOrder fm' (showSortOrder columns) =<< fmRestoreSortOrder fm'
 
 
+  -- Ctrl-H toggles visibility of hidden files
+  "<Ctrl>H" `onKey` do
+     fmGetHistoryBool fm' "ShowHiddenFiles" False  >>=  fmReplaceHistoryBool fm' "ShowHiddenFiles" . not
+     refreshCommand fm'
+
+
 ----------------------------------------------------------------------------------------------------
----- Движок выполнения консольных команд внутри FM gui ---------------------------------------------
+---- Р”РІРёР¶РѕРє РІС‹РїРѕР»РЅРµРЅРёСЏ РєРѕРЅСЃРѕР»СЊРЅС‹С… РєРѕРјР°РЅРґ РІРЅСѓС‚СЂРё FM gui ---------------------------------------------
 ----------------------------------------------------------------------------------------------------
 
-  -- При выполнении операций не выходим по исключениям, а печатаем сообщения о них в логфайл
-  let myHandleErrors action  =  do operationTerminated =: False
-                                   parent_id =:: myThreadId
-                                   action `catch` handler
-                                   whenM (val operationTerminated) $ do
-                                     sleepSeconds 0.1
-                                     operationTerminated =: False
-        where bg action = do
-                done <- newEmptyMVar
-                forkIO (action >> putMVar done ())
-                forkIO (foreverM (sleepSeconds 0.01 >> whenM (val operationTerminated) (putMVar done ())))
-                takeMVar done
-
-              handler ex = do
+  -- РџСЂРё РІС‹РїРѕР»РЅРµРЅРёРё РѕРїРµСЂР°С†РёР№ РЅРµ РІС‹С…РѕРґРёРј РїРѕ РёСЃРєР»СЋС‡РµРЅРёСЏРј, Р° РїРµС‡Р°С‚Р°РµРј СЃРѕРѕР±С‰РµРЅРёСЏ Рѕ РЅРёС… РІ Р»РѕРіС„Р°Р№Р»
+  let myHandleErrors successful action  =  do operationTerminated =: False
+                                              parent_id =:: myThreadId
+                                              action `catch` handler
+                                              whenM (val operationTerminated) $ do
+                                                sleepSeconds 0.1
+                                                operationTerminated =: False
+        where handler ex = do
+                successful =: False
                 unlessM (val operationTerminated) $ do
                   errmsg <- case ex of
                      Deadlock    -> i18n"0011 No threads to run: infinite loop or deadlock?"
@@ -516,55 +573,60 @@ myGUI run args = do
                   return ()
                 condPrintLineLn "w" ""
 
-  -- Тред, выполняющий команды архиватора
-  cmdChan <- newChan
+  -- РўСЂРµРґ, РІС‹РїРѕР»РЅСЏСЋС‰РёР№ РєРѕРјР°РЅРґС‹ Р°СЂС…РёРІР°С‚РѕСЂР°
   forkIO $ do
     foreverM $ do
-      commands <- readChan cmdChan
+      (commands, postAction) <- readChan cmdChan
       when (commands==[["ExitProgram"]])  $ do fileManagerMode =: True; shutdown "" aEXIT_CODE_SUCCESS
       postGUIAsync$ do widgetShowAll windowProgress
+      successful <- ref True
       for commands $ \cmd -> do
-        myHandleErrors (parseCmdline cmd >>= mapM_ run)
-      whenM (isEmptyChan cmdChan)$ postGUIAsync$ do widgetHide windowProgress; clearMessageBox; warningsBefore =:: val warnings; refreshCommand fm'
+        myHandleErrors successful (parseCmdline cmd >>= mapM_ run)
+      postAction =<< val successful
+      whenM (isEmptyChan cmdChan)$ postGUIAsync$ do onEmptyQueue; widgetHide windowProgress; clearMessageBox; warningsBefore =:: val warnings; refreshCommand fm'
       --uiDoneProgram
 
+  -- РџРѕРєР° РЅРµ РёСЃРїРѕР»СЊР·РѕРІР°С‚СЊ WinRAR РґР»СЏ С‚РµС… РєРѕРјР°РЅРґ, РіРґРµ РµС‰С‘ РЅРµ РґРѕР±Р°РІР»РµРЅР° СЃРїРµС†РёС„РёС‡РµСЃРєР°СЏ РѕР±СЂР°Р±РѕС‚РєР°
+  let use_winrar = False
+
   -- Depending on execution mode, either queue commands or run external FreeArc instances
-  let exec detach cmds =
-        if detach
-          then do freearc <- getExeName
+  let exec detach use_winrar postAction cmds =
+        if detach || use_winrar
+          then do archiver <- if use_winrar  then return "winrar.exe"  else getExeName
                   fm <- val fm'
-                  for cmds $ \cmd -> do
-                    let full_cmd = unparseCommand (freearc:cmd)
-                    if length(full_cmd) < aMAX_CMDLINE_LENGTH
-                      then Files.runCommand full_cmd (fm_curdir fm) False
-                      else forkIO_ $ do
-                             withTempFile (unicode2utf8$ unparseCommand cmd) $ \cmdfile -> do
-                               Files.runCommand (unparseCommand [freearc,'@':cmdfile]) (fm_curdir fm) True
+                  forkIO_ $ do
+                    for cmds $ \cmd -> do
+                      let full_cmd = unparseCommand (archiver:cmd)
+                      if length(full_cmd) < aMAX_CMDLINE_LENGTH
+                        then Files.runCommand full_cmd (fm_curdir fm) True
+                        else withTempFile (unicode2utf8$ unparseCommand cmd) $ \cmdfile -> do
+                               Files.runCommand (unparseCommand [archiver,'@':cmdfile]) (fm_curdir fm) True
+                    postAction True
 
-          else writeChan cmdChan cmds
+          else writeChan cmdChan (cmds,postAction)
 
-  -- Закрытие окна файл-менеджера
+  -- Р—Р°РєСЂС‹С‚РёРµ РѕРєРЅР° С„Р°Р№Р»-РјРµРЅРµРґР¶РµСЂР°
   let closeMainWindow = do
         sequence_ =<< listVal onExit
         fileManagerMode =: False
         showMessageBox
         widgetHide window
-        writeChan cmdChan [["ExitProgram"]]
+        writeChan cmdChan ([["ExitProgram"]],doNothing)
 
   window `onDestroy` closeMainWindow
 
 
 ----------------------------------------------------------------------------------------------------
----- Меню File -------------------------------------------------------------------------------------
+---- РњРµРЅСЋ File -------------------------------------------------------------------------------------
 ----------------------------------------------------------------------------------------------------
 
-  -- Открыть архив
+  -- РћС‚РєСЂС‹С‚СЊ Р°СЂС…РёРІ
   openAct `onActionActivate` do
     fm <- val fm'
     let curfile  =  if isFM_Archive fm  then fm_arcname fm  else fm_dir fm </> "."
     chooseFile window FileChooserActionOpen "0305 Open archive" aARCFILE_FILTER (return curfile) $ \filename -> do
       msgboxOnError $
-        chdir fm' filename
+        fmChdir fm' filename
 
   -- Select/unselect files by user-supplied mask
   let byDialog method msg = do
@@ -573,145 +635,158 @@ myGUI run args = do
   selectAct   `onActionActivate`  byDialog fmSelectFilenames   "0008 Select files"
   unselectAct `onActionActivate`  byDialog fmUnselectFilenames "0009 Unselect files"
 
-  -- Выделить все файлы
+  -- Р’С‹РґРµР»РёС‚СЊ РІСЃРµ С„Р°Р№Р»С‹
   selectAllAct `onActionActivate` do
     fmSelectAll fm'
 
-  -- Инвертировать выделение
+  -- РРЅРІРµСЂС‚РёСЂРѕРІР°С‚СЊ РІС‹РґРµР»РµРЅРёРµ
   invertSelAct `onActionActivate` do
     fmInvertSelection fm'
 
-  -- Обновить список файлов актуальными данными
+  -- РћР±РЅРѕРІРёС‚СЊ СЃРїРёСЃРѕРє С„Р°Р№Р»РѕРІ Р°РєС‚СѓР°Р»СЊРЅС‹РјРё РґР°РЅРЅС‹РјРё
   refreshAct `onActionActivate` do
     refreshCommand fm'
 
-  -- Выход из программы
+  -- Р’С‹С…РѕРґ РёР· РїСЂРѕРіСЂР°РјРјС‹
   exitAct `onActionActivate`
     closeMainWindow
 
 
 ----------------------------------------------------------------------------------------------------
----- Меню Commands ---------------------------------------------------------------------------------
+---- РњРµРЅСЋ Commands ---------------------------------------------------------------------------------
 ----------------------------------------------------------------------------------------------------
 
-  -- Упаковка данных
+  -- РЈРїР°РєРѕРІРєР° РґР°РЅРЅС‹С…
   addAct `onActionActivate` do
-    compressionOperation fm' addDialog exec "a" NoMode
+    compressionOperation fm' addDialog exec [AddDetachButton] "a" NoMode
 
-  -- Распаковка архив(ов)
+  -- Р Р°СЃРїР°РєРѕРІРєР° Р°СЂС…РёРІ(РѕРІ)
   extractAct `onActionActivate` do
     archiveOperation fm' $
-      extractDialog fm' exec "x"
+      extractDialog fm' exec [AddDetachButton] "x"
     rereadHistory curdir
 
-  -- Тестирование архив(ов)
+  -- РўРµСЃС‚РёСЂРѕРІР°РЅРёРµ Р°СЂС…РёРІ(РѕРІ)
   testAct `onActionActivate` do
     archiveOperation fm' $
-      extractDialog fm' exec "t"
+      extractDialog fm' exec [AddDetachButton] "t"
 
-  -- Информация об архиве
+  -- РРЅС„РѕСЂРјР°С†РёСЏ РѕР± Р°СЂС…РёРІРµ
   arcinfoAct `onActionActivate` do
     msgboxOnError $
       archiveOperation fm' $
         arcinfoDialog fm' exec NoMode
 
-  -- Удаление файлов (из архива)
+  -- РЈРґР°Р»РµРЅРёРµ С„Р°Р№Р»РѕРІ [РёР· Р°СЂС…РёРІР°]
   deleteAct `onActionActivate` do
     fm <- val fm'
-    files <- getSelection fm' (if isFM_Archive fm  then xCmdFiles  else const [])
+    files <- getSelection fm' (if isFM_Archive fm  then xCmdFiles  else (\dirname -> [dirname++[pathSeparator]]))
     if null files  then fmErrorMsg fm' "0012 There are no files selected!" else do
-    msg <- i18n$ case files of [_] | isFM_Archive fm -> "0160 Delete %1 from archive?"
-                                   | otherwise       -> "0161 Delete %1?"
-                               _   | isFM_Archive fm -> "0019 Delete %2 file(s) from archive?"
-                                   | otherwise       -> "0020 Delete %2 file(s)?"
+    msgDir <- i18n "0484 Delete directory %1?"
+    msg <- i18n$ case files of [f] | isFM_Archive fm          -> "0160 Delete %1 from archive?"
+                                   | isPathSeparator (last f) -> msgDir
+                                   | otherwise                -> "0161 Delete %1?"
+                               _   | isFM_Archive fm          -> "0019 Delete %2 file(s) from archive?"
+                                   | otherwise                -> "0020 Delete %2 file(s)?"
     whenM (askOkCancel window (formatn msg [head files, show3$ length files])) $ do
-      fmDeleteSelected fm'
+      files <- getSelection fm' (if isFM_Archive fm  then dCmdFiles  else (\dirname -> [dirname++[pathSeparator]]))
       if isFM_Archive fm
-        -- Стереть файлы из архива
+        -- РЎС‚РµСЂРµС‚СЊ С„Р°Р№Р»С‹ РёР· Р°СЂС…РёРІР°
         then do closeFMArc fm'
+                fmDeleteSelected fm'
                 let arcname = fm_arcname fm
-                exec False [["d", "--noarcext", "--", arcname]++files]
-        -- Удалить файлы на диске
-        else mapM_ (ignoreErrors.fileRemove.(fm_dir fm </>)) files
+                exec False use_winrar doNothing [["d", "--noarcext", "-fn", "--", arcname]++map (fm_arcdir fm </>) files]
+        -- РЈРґР°Р»РёС‚СЊ С„Р°Р№Р»С‹/РєР°С‚Р°Р»РѕРіРё РЅР° РґРёСЃРєРµ
+        else do let rm f | isPathSeparator (last f) = whenM (askOkCancel window (format msgDir (dropEnd 1 f))) $ do
+                                                         dirRemoveRecursive fileRemove (dropEnd 1 f)
+                         | otherwise                = fileRemove f
+                mapM_ (ignoreErrors.rm.(fm_dir fm </>)) files
+                fmDeleteSelected fm'
 
 
 ----------------------------------------------------------------------------------------------------
----- Меню Tools ------------------------------------------------------------------------------------
+---- РњРµРЅСЋ Tools ------------------------------------------------------------------------------------
 ----------------------------------------------------------------------------------------------------
 
-  -- Защитить архив от записи
+  -- Р—Р°С‰РёС‚РёС‚СЊ Р°СЂС…РёРІ РѕС‚ Р·Р°РїРёСЃРё
   lockAct `onActionActivate` do
     multiArchiveOperation fm' $ \archives -> do
       let msg = "0299 Lock archive(s)?"
       whenM (askOkCancel window (formatn msg [head archives, show3$ length archives])) $ do
         closeFMArc fm'
         for archives $ \arcname -> do
-          exec False [["ch", "--noarcext", "-k", "--", arcname]]
+          exec False use_winrar doNothing [["ch", "--noarcext", "-k", "--", arcname]]
 
-  -- Изменить комментарий архива
+  -- РР·РјРµРЅРёС‚СЊ РєРѕРјРјРµРЅС‚Р°СЂРёР№ Р°СЂС…РёРІР°
   commentAct `onActionActivate` do
     msgboxOnError $
       archiveOperation fm' $
         arcinfoDialog fm' exec CommentMode
 
-  -- Преобразовать архив в SFX
+  -- РџРµСЂРµР¶Р°С‚СЊ С„Р°Р№Р»С‹ РІ Р°СЂС…РёРІРµ
   recompressAct `onActionActivate` do
-    compressionOperation fm' addDialog exec "ch" RecompressMode
+    compressionOperation fm' addDialog exec [AddDetachButton] "ch" RecompressMode
 
-  -- Преобразовать архив в SFX
+  -- РџСЂРµРѕР±СЂР°Р·РѕРІР°С‚СЊ Р°СЂС…РёРІ РІ SFX
   toSfxAct `onActionActivate` do
-    compressionOperation fm' addDialog exec "ch" MakeSFXMode
+    compressionOperation fm' addDialog exec [AddDetachButton] "ch" MakeSFXMode
 
-  -- Преобразовать чужой архив в формат FreeArc
+  -- РџСЂРµРѕР±СЂР°Р·РѕРІР°С‚СЊ С‡СѓР¶РѕР№ Р°СЂС…РёРІ РІ С„РѕСЂРјР°С‚ FreeArc
   toFaAct `onActionActivate` do
-    compressionOperation fm' addDialog exec "cvt" NoMode
+    compressionOperation fm' addDialog exec [AddDetachButton] "cvt" NoMode
 
-  -- Зашифровать архив
+  -- Р—Р°С€РёС„СЂРѕРІР°С‚СЊ Р°СЂС…РёРІ
   encryptAct `onActionActivate` do
-    compressionOperation fm' addDialog exec "ch" EncryptionMode
+    compressionOperation fm' addDialog exec [AddDetachButton] "ch" EncryptionMode
 
-  -- Добавить RR в архив
+  -- Р”РѕР±Р°РІРёС‚СЊ RR РІ Р°СЂС…РёРІ
   addRrAct `onActionActivate` do
-    compressionOperation fm' addDialog exec "ch" ProtectionMode
+    compressionOperation fm' addDialog exec [AddDetachButton] "ch" ProtectionMode
 
-  -- Восстановить повреждённый архив
+  -- Р’РѕСЃСЃС‚Р°РЅРѕРІРёС‚СЊ РїРѕРІСЂРµР¶РґС‘РЅРЅС‹Р№ Р°СЂС…РёРІ
   repairAct `onActionActivate` do
     multiArchiveOperation fm' $ \archives -> do
       let msg = "0381 Repair archive(s)? Repaired archive(s) will be placed into files named fixed.*"
       whenM (askOkCancel window (formatn msg [head archives, show3$ length archives])) $ do
         closeFMArc fm'
         for archives $ \arcname -> do
-          exec False [["r", "--noarcext", "--", arcname]]
+          exec False use_winrar doNothing [["r", "--noarcext", "--", arcname]]
 
-  -- Модификация архивов
+  -- РњРѕРґРёС„РёРєР°С†РёСЏ Р°СЂС…РёРІРѕРІ
   modifyAct `onActionActivate` do
-    compressionOperation fm' addDialog exec "ch" NoMode
+    compressionOperation fm' addDialog exec [AddDetachButton] "ch" NoMode
 
-  -- Объединение архивов
+  -- РћР±СЉРµРґРёРЅРµРЅРёРµ Р°СЂС…РёРІРѕРІ
   joinAct `onActionActivate` do
-    compressionOperation fm' addDialog exec "j" NoMode
+    compressionOperation fm' addDialog exec [AddDetachButton] "j" NoMode
 
 
 ----------------------------------------------------------------------------------------------------
----- Меню Options ----------------------------------------------------------------------------------
+---- РњРµРЅСЋ Options ----------------------------------------------------------------------------------
 ----------------------------------------------------------------------------------------------------
 
-  -- Окно настроек программы
+  -- РћРєРЅРѕ РЅР°СЃС‚СЂРѕРµРє РїСЂРѕРіСЂР°РјРјС‹
   settingsAct `onActionActivate` do
     settingsDialog fm'
 
-  -- Действия с логфайлом
+  -- Р’С‹Р·РѕРІ gtk2_prefs.exe
+  changeSkinAct `onActionActivate` do
+    exe <- getExeName                                -- Name of FreeArc.exe file
+    let dir   =  exe.$takeDirectory                  -- FreeArc.exe directory
+    Files.runCommand (dir</>"gtk2_prefs.exe") dir False
+
+  -- Р”РµР№СЃС‚РІРёСЏ СЃ Р»РѕРіС„Р°Р№Р»РѕРј
   let withLogfile action = do
         logfileHist <- fmGetHistory fm' "logfile"
         case logfileHist of
           logfile:_ | logfile>""  ->  action logfile
           _                       ->  fmErrorMsg fm' "0303 No log file specified in Settings dialog!"
 
-  -- Просмотреть логфайл
+  -- РџСЂРѕСЃРјРѕС‚СЂРµС‚СЊ Р»РѕРіС„Р°Р№Р»
   viewLogAct `onActionActivate` do
     withLogfile runViewCommand
 
-  -- Удалить логфайл
+  -- РЈРґР°Р»РёС‚СЊ Р»РѕРіС„Р°Р№Р»
   clearLogAct `onActionActivate` do
     withLogfile $ \logfile -> do
       msg <- i18n"0304 Clear logfile %1?"
@@ -720,16 +795,14 @@ myGUI run args = do
 
 
 ----------------------------------------------------------------------------------------------------
----- Меню Help -------------------------------------------------------------------------------------
+---- РњРµРЅСЋ Help -------------------------------------------------------------------------------------
 ----------------------------------------------------------------------------------------------------
 
-  -- Home/news page for the current locale
-  homeURL  <- ((aARC_WEBSITE ++ "/") ++) ==<< i18n"0254 "
-  newsURL  <- ((aARC_WEBSITE ++ "/") ++) ==<< i18n"0255 News.aspx"
-  forumURL <- ((aARC_WEBSITE ++ "/") ++) ==<< i18n"0457 redirects/forum.aspx"
-  wikiURL  <- ((aARC_WEBSITE ++ "/") ++) ==<< i18n"0458 redirects/wiki.aspx"
+  -- РљРѕРґ СЏР·С‹РєР° (ru,ja...)
+  langcode <- i18n "0462 "
+  let newsURL = aARC_WEBSITE ++ "/News.aspx"
 
-  -- Открыть URL
+  -- РћС‚РєСЂС‹С‚СЊ URL
 #ifdef FREEARC_WIN
   let openWebsite url  =  runFile url "." False
 #else
@@ -739,39 +812,48 @@ myGUI run args = do
                              return ()
 #endif
 
-  -- Открыть файл помощи
+  -- РћС‚РєСЂС‹С‚СЊ (Р»РѕРєР°Р»РёР·РѕРІР°РЅРЅСѓСЋ) СЃС‚СЂР°РЅРёС†Сѓ РЅР° СЃР°Р№С‚Рµ РїСЂРѕРіСЂР°РјРјС‹
+  let openFreeArcSite page = do
+        forkIO_ $ do
+          let url     = aARC_WEBSITE ++ "/" ++ page
+              i18_url = aARC_WEBSITE ++ "/" ++ langcode ++ "/" ++ page
+          if langcode==""  then openWebsite url  else do
+          i18 <- fileExist i18_url
+          openWebsite (iif i18 i18_url url)
+
+  -- РћС‚РєСЂС‹С‚СЊ С„Р°Р№Р» РїРѕРјРѕС‰Рё
   let openHelp helpfile = do
         doc  <- i18n helpfile
-        file <- findFile libraryFilePlaces (iif isWindows "../Documentation" "Documentation" </> doc)
+        file <- findFile libraryFilePlaces (iif isWindows "..\\Documentation" "Documentation" </> doc)
         case file of
           "" -> return ()
-          _  -> openWebsite ((isWindows&&&windosifyPath) file)
+          _  -> openWebsite file
 
-  -- Прочитать ИД, сгенерённый для этого компьютера
+  -- РџСЂРѕС‡РёС‚Р°С‚СЊ РР”, СЃРіРµРЅРµСЂС‘РЅРЅС‹Р№ РґР»СЏ СЌС‚РѕРіРѕ РєРѕРјРїСЊСЋС‚РµСЂР°
   let getUserID = do
 #ifndef FREEARC_WIN
-        -- Имитация неработающего Windows Registry для других ОС
+        -- РРјРёС‚Р°С†РёСЏ РѕС‚СЃСѓС‚СЃС‚РІСѓСЋС‰РµРіРѕ Windows Registry РґР»СЏ РґСЂСѓРіРёС… РћРЎ
         let registryGetStr root branch key       = return Nothing
             registrySetStr root branch key value = return ()
             hKEY_LOCAL_MACHINE                   = ()
 #endif
-        -- Сначала ищем его в ини-файле
+        -- РЎРЅР°С‡Р°Р»Р° РёС‰РµРј РµРіРѕ РІ РёРЅРё-С„Р°Р№Р»Рµ
         userid <- fmGetHistory1 fm' "UserID" ""
         if userid/=""  then return (Just userid)  else do
-        -- Если не получилось - читаем ключ предыдущей инсталляции из Windows Registry...
-        userid <- do userid <- registryGetStr hKEY_LOCAL_MACHINE "SOFTWARE\\FreeArc" "UserID"
+        -- Р•СЃР»Рё РЅРµ РїРѕР»СѓС‡РёР»РѕСЃСЊ - С‡РёС‚Р°РµРј РєР»СЋС‡ РїСЂРµРґС‹РґСѓС‰РµР№ РёРЅСЃС‚Р°Р»Р»СЏС†РёРё РёР· Windows Registry...
+        userid <- do userid <- registryGetStr hKEY_LOCAL_MACHINE ("SOFTWARE\\"++aFreeArc) "UserID"
                      case userid of
                        Just userid -> return userid
-                                      -- ... или в крайнем случае - генерим новый
+                                      -- ... РёР»Рё РІ РєСЂР°Р№РЅРµРј СЃР»СѓС‡Р°Рµ - РіРµРЅРµСЂРёРј РЅРѕРІС‹Р№
                        Nothing     -> generateRandomBytes 8 >>== encode16
-        -- И записываем его повсюду
-        registrySetStr hKEY_LOCAL_MACHINE "SOFTWARE\\FreeArc" "UserID" userid
+        -- Р Р·Р°РїРёСЃС‹РІР°РµРј РµРіРѕ РїРѕРІСЃСЋРґСѓ
+        registrySetStr hKEY_LOCAL_MACHINE ("SOFTWARE\\"++aFreeArc) "UserID" userid
         fmReplaceHistory fm' "UserID" userid
-        -- Возвращаем его только если запись в ини-файл была успешной
+        -- Р’РѕР·РІСЂР°С‰Р°РµРј РµРіРѕ С‚РѕР»СЊРєРѕ РµСЃР»Рё Р·Р°РїРёСЃСЊ РІ РёРЅРё-С„Р°Р№Р» Р±С‹Р»Р° СѓСЃРїРµС€РЅРѕР№
         userid1 <- fmGetHistory1 fm' "UserID" ""
         return (if userid==userid1  then Just userid  else Nothing)
 
-  -- Возвращает True раз в сутки
+  -- Р’РѕР·РІСЂР°С‰Р°РµС‚ True СЂР°Р· РІ СЃСѓС‚РєРё
   let daily = do
         last <- fmGetHistory1 fm' "LastCheck" ""
         now  <- getUnixTime
@@ -782,38 +864,43 @@ myGUI run args = do
         return (show now==now1)
 
   -- Size of maximum memory block we can allocate in bytes
-  maxBlock <- getMaxMemToAlloc
+  maxBlock <- getMaxBlockToAlloc
 
-  -- Регистрирует использование программы и проверяет новости
-  --  (manual=True - ручной вызов из меню, False - ежедневная автопроверка)
+  -- Р РµРіРёСЃС‚СЂРёСЂСѓРµС‚ РёСЃРїРѕР»СЊР·РѕРІР°РЅРёРµ РїСЂРѕРіСЂР°РјРјС‹ Рё РїСЂРѕРІРµСЂСЏРµС‚ РЅРѕРІРѕСЃС‚Рё
+  --  (manual=True - СЂСѓС‡РЅРѕР№ РІС‹Р·РѕРІ РёР· РјРµРЅСЋ, False - РµР¶РµРґРЅРµРІРЅР°СЏ Р°РІС‚РѕРїСЂРѕРІРµСЂРєР°)
   let checkNews manual = do
         postGUIAsync$ fmStackMsg fm' "0295 Checking for updates..."
         forkIO_ $ do
-          -- Сообщим об использовании программы
+          -- РЎРѕРѕР±С‰РёРј РѕР± РёСЃРїРѕР»СЊР·РѕРІР°РЅРёРё РїСЂРѕРіСЂР°РјРјС‹
           whenJustM_ getUserID $ \userid -> do
 #ifdef FREEARC_WIN
             si <- getSystemInfo; let ramLimit = showMem (si.$siMaximumApplicationAddress.$ptrToWordPtr.$toInteger `roundTo` (4*mb))
 #endif
             language <- i18n"0000 English"
-            let url = aARC_WEBSITE ++ "/CheckNews.aspx?user=" ++ userid ++ "&version=" ++ urlEncode aARC_VERSION
+            let url = aARC_WEBSITE ++ "/CheckNews.aspx"
+#ifndef HAMSTER
+                                   ++ "?user=" ++ userid ++ "&version=" ++ urlEncode aARC_VERSION
                                    ++ "&OS%20family=" ++ iif isWindows "Windows" "Unix"
-                                   ++ "&RAM=" ++ showMem (toInteger getPhysicalMemory `roundTo` (4*mb))
+                                   ++ "&RAM=" ++ showMem (toInteger getPhysicalMemory `roundTo` mb)
 #ifdef FREEARC_WIN
                                    ++ "&address%20space=" ++ ramLimit
+                                   ++ "&windows%20version=" ++ urlEncode getWindowsVersion
 #endif
-                                   ++ "&largest%20memory%20block=" ++ showMem (maxBlock `roundDown` (100*mb))
+                                   ++ "&largest%20memory%20block=" ++ showMem (maxBlock `roundDown` mb)
                                    ++ "&number%20of%20cores=" ++ show getProcessorsCount
                                    ++ "&language=" ++ urlEncode language
-            -- Сообщаем статистику и проверяем страницу новостей
+#endif
+            -- РЎРѕРѕР±С‰Р°РµРј СЃС‚Р°С‚РёСЃС‚РёРєСѓ Рё РїСЂРѕРІРµСЂСЏРµРј СЃС‚СЂР°РЅРёС†Сѓ РЅРѕРІРѕСЃС‚РµР№
             handleErrors
-              -- Выполняется при недоступности страницы
+              -- Р’С‹РїРѕР»РЅСЏРµС‚СЃСЏ РїСЂРё РЅРµРґРѕСЃС‚СѓРїРЅРѕСЃС‚Рё СЃС‚СЂР°РЅРёС†С‹
               (when manual$ postGUIAsync$ do
                   msg <- i18n"0296 Cannot open %1. Do you want to check the page with browser?"
                   whenM (askOkCancel window (format msg newsURL)) $ do
-                    openWebsite newsURL)
-              -- Попытка прочитать страницу
-              (fileGetBinary url >>== (`showHex` "").crc32) $ \new_crc -> do
-            -- Страница новостей успешно прочитана
+                    openFreeArcSite "News.aspx")
+              -- РџРѕРїС‹С‚РєР° РїСЂРѕС‡РёС‚Р°С‚СЊ СЃС‚СЂР°РЅРёС†Сѓ
+              (fileGetBinary url) $ \news -> do
+            -- РЎС‚СЂР°РЅРёС†Р° РЅРѕРІРѕСЃС‚РµР№ СѓСЃРїРµС€РЅРѕ РїСЂРѕС‡РёС‚Р°РЅР°
+            new_crc <- return$ showHex (crc32 news) ""
             old_crc <- fmGetHistory1 fm' "news_crc" ""
             postGUIAsync$ do
             fmStackMsg fm' ""
@@ -822,11 +909,13 @@ myGUI run args = do
                manual &&& fmInfoMsg fm' (format msg newsURL)
              else do
                fmReplaceHistory fm' "news_crc" new_crc
+               let news_page = news.$ (lines >>> map (split2 '=') >>> lookup "newsURL" >>> fromMaybe "News.aspx")
+                   newsURL   = aARC_WEBSITE ++ "/" ++ news_page
                msg <- i18n"0298 Found new information at %1! Open the page with browser?"
                whenM (askOkCancel window (format msg newsURL)) $ do
-                 openWebsite newsURL
+                 openFreeArcSite news_page
 
-  -- Дважды в час проверять отсутствие новостей
+  -- Р”РІР°Р¶РґС‹ РІ С‡Р°СЃ РїСЂРѕРІРµСЂСЏС‚СЊ РѕС‚СЃСѓС‚СЃС‚РІРёРµ РЅРѕРІРѕСЃС‚РµР№
   forkIO_ $ do
     whenM (fmGetHistoryBool fm' "CheckNews" True) $ do
       foreverM $ do
@@ -835,58 +924,63 @@ myGUI run args = do
         sleepSeconds (30*60)
 
 
-  -- Помощь по использованию GUI
+  -- РџСЂРµРґР»РѕР¶РёС‚СЊ СѓРґР°Р»РёС‚СЊ СЃС‚Р°СЂС‹Рµ РІСЂРµРјРµРЅРЅС‹Рµ С„Р°Р№Р»С‹ (РµСЃР»Рё РјС‹ РЅРµ СЂР°Р±РѕС‚Р°РµРј РєР°Рє СЂР°Р· СЃ РЅРёРјРё - РЅР°РїСЂРёРјРµСЂ РїСЂРё РѕС‚РєСЂС‹С‚РёРё РІР»РѕР¶РµРЅРЅРѕРіРѕ Р°СЂС…РёРІР°)
+  unlessM (isTemporaryInstance args) $ forkIO_ $ do
+    files <- findTempFiles
+    when (not$ null files) $ do
+      postGUIAsync$ do
+        whenM (askYesNo window "0494 Found temporary FreeArc files. Delete them?\n(Press 'No' if there is already another FreeArc process running in the background)") $ do
+          for files $ \fname -> do
+            ignoreErrors$ forcedFileRemove fname
+            ignoreErrors$ dirRemoveRecursive forcedFileRemove fname
+
+
+  -- РџРѕРјРѕС‰СЊ РїРѕ РёСЃРїРѕР»СЊР·РѕРІР°РЅРёСЋ GUI
   helpAct `onActionActivate` do
     openHelp "0256 FreeArc-GUI-Eng.htm"
 
-  -- Помощь по использованию командной строки
+  -- РџРѕРјРѕС‰СЊ РїРѕ РёСЃРїРѕР»СЊР·РѕРІР°РЅРёСЋ РєРѕРјР°РЅРґРЅРѕР№ СЃС‚СЂРѕРєРё
   helpCmdAct `onActionActivate` do
     openHelp "0257 FreeArc036-eng.htm"
 
-  -- Домашняя страница программы
+  -- Р”РѕРјР°С€РЅСЏСЏ СЃС‚СЂР°РЅРёС†Р° РїСЂРѕРіСЂР°РјРјС‹
   homepageAct `onActionActivate` do
-    openWebsite homeURL
+    openFreeArcSite ""
 
-  -- Домашняя страница программы
+  -- Р”РѕРјР°С€РЅСЏСЏ СЃС‚СЂР°РЅРёС†Р° РїСЂРѕРіСЂР°РјРјС‹
   openForumAct `onActionActivate` do
-    openWebsite forumURL
+    openFreeArcSite "redirects/forum.aspx"
 
-  -- Домашняя страница программы
+  -- Р”РѕРјР°С€РЅСЏСЏ СЃС‚СЂР°РЅРёС†Р° РїСЂРѕРіСЂР°РјРјС‹
   openWikiAct `onActionActivate` do
-    openWebsite wikiURL
+    openFreeArcSite "redirects/wiki.aspx"
 
-  -- Проверка обновлений на сайте
+  -- РџСЂРѕРІРµСЂРєР° РѕР±РЅРѕРІР»РµРЅРёР№ РЅР° СЃР°Р№С‚Рµ
   whatsnewAct `onActionActivate` do
     checkNews True
 
-  -- Диалог About
+  -- Р”РёР°Р»РѕРі About
   aboutAct `onActionActivate` do
+    license <- i18ns aARC_LICENSE
     bracketCtrlBreak "aboutDialogDestroy" aboutDialogNew widgetDestroy $ \dialog -> do
+    contributors <- findFile libraryFilePlaces (iif isWindows "../License" "License" </> "Contributors.txt")
+    contributors <- contributors &&& fileGetBinary contributors
     dialog `set` [windowTransientFor   := window
                  ,aboutDialogName      := aARC_NAME
                  ,aboutDialogVersion   := aARC_VERSION_WITH_DATE
                  ,aboutDialogCopyright := "(c) "++aARC_EMAIL
-                 ,aboutDialogComments  := unlines aARC_LICENSE
-                 ,aboutDialogWebsite   := homeURL
-                 ,aboutDialogAuthors   := ["Igor Pavlov (author of 7-zip, LZMA and EXE filter)"
-                                          ,"Dmitry Shkarin (author of PPMd)"
-                                          ,"Ilya Grebnov (author of GRZipII and LZP filter)"
-                                          ,"Alexander Djourik and Pavel Zhilin (authors of TTA)"
-                                          ,"Dmitry Subbotin (author of Carryless rangecoder)"
-                                          ,"Joachim Henke (coauthor of Tornado)"
-                                          ,"Mark Shevchenko (author of GUI SFX and web site)"
-                                          ,aARC_EMAIL++" (author of remaining parts)"
-                 ]]
+                 ,aboutDialogComments  := unlines license
+                 ,aboutDialogWebsite   := aARC_WEBSITE
+                 ,aboutDialogAuthors   := lines contributors
+                 ]
     dialogRun dialog
     return ()
 
-  -- Включить поддержку URL в диалоге About
-  aboutDialogSetUrlHook openWebsite
+  -- Р’РєР»СЋС‡РёС‚СЊ РїРѕРґРґРµСЂР¶РєСѓ URL РІ РґРёР°Р»РѕРіРµ About
+  aboutDialogSetUrlHook (\url -> if url==aARC_WEBSITE  then openFreeArcSite ""  else openWebsite url)
 
-  -- Инициализируем состояние файл-менеджера каталогом/архивом, заданным в командной строке (при его отсутствии - текущим каталогом)
+  -- РРЅРёС†РёР°Р»РёР·РёСЂСѓРµРј СЃРѕСЃС‚РѕСЏРЅРёРµ С„Р°Р№Р»-РјРµРЅРµРґР¶РµСЂР° РєР°С‚Р°Р»РѕРіРѕРј/Р°СЂС…РёРІРѕРј, Р·Р°РґР°РЅРЅС‹Рј РІ РєРѕРјР°РЅРґРЅРѕР№ СЃС‚СЂРѕРєРµ (РїСЂРё РµРіРѕ РѕС‚СЃСѓС‚СЃС‚РІРёРё - С‚РµРєСѓС‰РёРј РєР°С‚Р°Р»РѕРіРѕРј)
   terminateOnError $
-    chdir fm' (head (args++["."]))
-  fmStatusBarTotals fm'
+    fmChdir fm' (head (args++["."]))
 
   widgetShowAll window
-

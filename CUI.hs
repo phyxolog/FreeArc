@@ -1,12 +1,13 @@
 {-# OPTIONS_GHC -cpp #-}
 ----------------------------------------------------------------------------------------------------
----- Информирование пользователя о ходе выполнения программы (CUI - Console User Interface).  ------
+---- РРЅС„РѕСЂРјРёСЂРѕРІР°РЅРёРµ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ Рѕ С…РѕРґРµ РІС‹РїРѕР»РЅРµРЅРёСЏ РїСЂРѕРіСЂР°РјРјС‹ (CUI - Console User Interface).  ------
 ----------------------------------------------------------------------------------------------------
 module CUI where
 
 import Prelude hiding (catch)
 import Control.Monad
 import Control.Concurrent
+import Control.OldException
 import Data.Char
 import Data.IORef
 import Foreign
@@ -24,6 +25,7 @@ import System.Posix.Terminal
 #endif
 
 import Utils
+import Charsets
 import Errors
 import Files
 import FileInfo
@@ -32,40 +34,52 @@ import UIBase
 
 
 ----------------------------------------------------------------------------------------------------
----- Отображение индикатора прогресса --------------------------------------------------------------
+---- РћС‚РѕР±СЂР°Р¶РµРЅРёРµ РёРЅРґРёРєР°С‚РѕСЂР° РїСЂРѕРіСЂРµСЃСЃР° --------------------------------------------------------------
 ----------------------------------------------------------------------------------------------------
 
--- |Запускает background thread для вывода индикатора прогресса
+-- |Р—Р°РїСѓСЃРєР°РµС‚ background thread РґР»СЏ РІС‹РІРѕРґР° РёРЅРґРёРєР°С‚РѕСЂР° РїСЂРѕРіСЂРµСЃСЃР°
 guiStartProgram = do
-  -- Обновляем индикатор прогресса и заголовок окна раз в 0.5 секунды
+  -- РћР±РЅРѕРІР»СЏРµРј РёРЅРґРёРєР°С‚РѕСЂ РїСЂРѕРіСЂРµСЃСЃР° Рё Р·Р°РіРѕР»РѕРІРѕРє РѕРєРЅР° СЂР°Р· РІ 0.5 СЃРµРєСѓРЅРґС‹
   indicatorThread 0.5 $ \updateMode indicator indType title b bytes total processed p -> do
-    myPutStr$ back_percents indicator ++ p
-    myFlushStdout
     setConsoleTitle title
+    taskbar_SetProgressValue (i bytes) (i total)
+    withConsoleAccess $ do
+      myPutStr$ back_percents indicator ++ p
+      myFlushStdout
 
--- |Вызывается в начале обработки архива
+-- |Р’С‹Р·С‹РІР°РµС‚СЃСЏ РІ РЅР°С‡Р°Р»Рµ РѕР±СЂР°Р±РѕС‚РєРё Р°СЂС…РёРІР°
 guiStartArchive = doNothing0
 
--- |Вызывается в начале обработки файла
+-- |РћС‚РјРµС‚РёС‚СЊ РЅР°С‡Р°Р»Рѕ СѓРїР°РєРѕРІРєРё РёР»Рё СЂР°СЃРїР°РєРѕРІРєРё РґР°РЅРЅС‹С…
+guiStartProcessing = doNothing0
+
+-- |РќР°С‡Р°Р»Рѕ СЃР»РµРґСѓСЋС‰РµРіРѕ С‚РѕРјР° Р°СЂС…РёРІР°
+guiStartVolume filename = doNothing0
+
+-- |Р’С‹Р·С‹РІР°РµС‚СЃСЏ РІ РЅР°С‡Р°Р»Рµ РѕР±СЂР°Р±РѕС‚РєРё С„Р°Р№Р»Р°
 guiStartFile = do
   command <- val ref_command
   when (opt_indicator command == "2") $ do
     syncUI $ do
     uiSuspendProgressIndicator
-    uiMessage' <- val uiMessage
+    (msg,filename)  <- val uiMessage
+    imsg <- i18n (msg ||| msgDo(cmd_name command))
     myPutStrLn   ""
-    myPutStr$    left_justify 72 (msgFile(cmd_name command) ++ uiMessage')
+    myPutStr$    left_justify 72 ("  "++format imsg filename)
     uiResumeProgressIndicator
     hFlush stdout
 
--- |Приостановить вывод индикатора прогресса и стереть его следы
+-- |РўРµРєСѓС‰РёР№ РѕР±СЉС‘Рј РёСЃС…РѕРґРЅС‹С…/СЃР¶Р°С‚С‹С… РґР°РЅРЅС‹С…
+guiUpdateProgressIndicator = doNothing0
+
+-- |РџСЂРёРѕСЃС‚Р°РЅРѕРІРёС‚СЊ РІС‹РІРѕРґ РёРЅРґРёРєР°С‚РѕСЂР° РїСЂРѕРіСЂРµСЃСЃР° Рё СЃС‚РµСЂРµС‚СЊ РµРіРѕ СЃР»РµРґС‹
 uiSuspendProgressIndicator = do
   aProgressIndicatorEnabled =: False
   (indicator, indType, arcname, direction, b, bytes', total') <- val aProgressIndicatorState
   myPutStr$ clear_percents indicator
   myFlushStdout
 
--- |Возобновить вывод индикатора прогресса и вывести его текущее значение
+-- |Р’РѕР·РѕР±РЅРѕРІРёС‚СЊ РІС‹РІРѕРґ РёРЅРґРёРєР°С‚РѕСЂР° РїСЂРѕРіСЂРµСЃСЃР° Рё РІС‹РІРµСЃС‚Рё РµРіРѕ С‚РµРєСѓС‰РµРµ Р·РЅР°С‡РµРЅРёРµ
 uiResumeProgressIndicator = do
   (indicator, indType, arcname, direction, b :: Rational, bytes', total') <- val aProgressIndicatorState
   bytes <- bytes' (round b);  total <- total'
@@ -73,14 +87,17 @@ uiResumeProgressIndicator = do
   myFlushStdout
   aProgressIndicatorEnabled =: True
 
--- |Сделать паузу в выполнении программы
+-- |РЎРґРµР»Р°С‚СЊ РїР°СѓР·Сѓ РІ РІС‹РїРѕР»РЅРµРЅРёРё РїСЂРѕРіСЂР°РјРјС‹
 guiPauseAtEnd = do
   withoutEcho getHiddenChar
   return ()
 
--- |Завершить выполнение программы
+-- |Р—Р°РІРµСЂС€РёС‚СЊ РІС‹РїРѕР»РЅРµРЅРёРµ РїСЂРѕРіСЂР°РјРјС‹
 guiDoneProgram = do
   return ()
+
+-- |Pause progress indicator & timing while dialog runs
+pauseEverything  =  pauseTiming . pauseTaskbar
 
 {-# NOINLINE guiStartProgram #-}
 {-# NOINLINE guiStartFile #-}
@@ -90,14 +107,14 @@ guiDoneProgram = do
 
 
 ----------------------------------------------------------------------------------------------------
----- Запросы к пользователю ("Перезаписать файл?" и т.п.) ------------------------------------------
+---- Р—Р°РїСЂРѕСЃС‹ Рє РїРѕР»СЊР·РѕРІР°С‚РµР»СЋ ("РџРµСЂРµР·Р°РїРёСЃР°С‚СЊ С„Р°Р№Р»?" Рё С‚.Рї.) ------------------------------------------
 ----------------------------------------------------------------------------------------------------
 
--- |Запрос о перезаписи файла
+-- |Р—Р°РїСЂРѕСЃ Рѕ РїРµСЂРµР·Р°РїРёСЃРё С„Р°Р№Р»Р°
 askOverwrite filename _ _ _ =  ask ("Overwrite " ++ filename)
 {-# NOINLINE askOverwrite #-}
 
--- |Общий механизм для выдачи запросов к пользователю
+-- |РћР±С‰РёР№ РјРµС…Р°РЅРёР·Рј РґР»СЏ РІС‹РґР°С‡Рё Р·Р°РїСЂРѕСЃРѕРІ Рє РїРѕР»СЊР·РѕРІР°С‚РµР»СЋ
 ask question ref_answer answer_on_u =  do
   old_answer <- val ref_answer
   new_answer <- case old_answer of
@@ -110,9 +127,9 @@ ask question ref_answer answer_on_u =  do
     "u" -> return answer_on_u
     _   -> return (new_answer `elem` ["y","a"])
 
--- |Собственно общение с пользователем происходит здесь
-ask_user question = syncUI $ pauseTiming go  where
-  go = do myPutStr$ "\n  "++question++" ("++valid_answers++")? "
+-- |РЎРѕР±СЃС‚РІРµРЅРЅРѕ РѕР±С‰РµРЅРёРµ СЃ РїРѕР»СЊР·РѕРІР°С‚РµР»РµРј РїСЂРѕРёСЃС…РѕРґРёС‚ Р·РґРµСЃСЊ
+ask_user question = syncUI $ pauseEverything go  where
+  go = do myPutStr$ "\n  "++question++"?\n  "++commented_answers++"? "
           hFlush stdout
           answer  <-  getLine >>== strLower
           when (answer=="q") $ do
@@ -121,7 +138,7 @@ ask_user question = syncUI $ pauseTiming go  where
             then return answer
             else myPutStr askHelp >> go
 
--- |Подсказка, выводимая на экран при недопустимом ответе
+-- |РџРѕРґСЃРєР°Р·РєР°, РІС‹РІРѕРґРёРјР°СЏ РЅР° СЌРєСЂР°РЅ РїСЂРё РЅРµРґРѕРїСѓСЃС‚РёРјРѕРј РѕС‚РІРµС‚Рµ
 askHelp = unlines [ "  Valid answers are:"
                   , "    y - yes"
                   , "    n - no"
@@ -131,21 +148,22 @@ askHelp = unlines [ "  Valid answers are:"
                   , "    q - quit program"
                   ]
 
+commented_answers = "(Y)es / (N)o / (A)lways / (S)kip all / (U)pdate all / (Q)uit"
 valid_answers = "y/n/a/s/u/q"
 
 
 ----------------------------------------------------------------------------------------------------
----- Запрос паролей --------------------------------------------------------------------------------
+---- Р—Р°РїСЂРѕСЃ РїР°СЂРѕР»РµР№ --------------------------------------------------------------------------------
 ----------------------------------------------------------------------------------------------------
 
 ask_passwords = (ask_encryption_password, ask_decryption_password, bad_decryption_password)
 
--- |Печатает сообщение о том, что введённый пароль не подходит для дешифрования
+-- |РџРµС‡Р°С‚Р°РµС‚ СЃРѕРѕР±С‰РµРЅРёРµ Рѕ С‚РѕРј, С‡С‚Рѕ РІРІРµРґС‘РЅРЅС‹Р№ РїР°СЂРѕР»СЊ РЅРµ РїРѕРґС…РѕРґРёС‚ РґР»СЏ РґРµС€РёС„СЂРѕРІР°РЅРёСЏ
 bad_decryption_password = myPutStrLn "Incorrect password"
 
--- |Запрос пароля при сжатии. Используется невидимый ввод
--- и запрос повторяется дважды для исключения ошибки при его вводе
-ask_encryption_password opt_parseData = syncUI $ pauseTiming $ do
+-- |Р—Р°РїСЂРѕСЃ РїР°СЂРѕР»СЏ РїСЂРё СЃР¶Р°С‚РёРё. РСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ РЅРµРІРёРґРёРјС‹Р№ РІРІРѕРґ
+-- Рё Р·Р°РїСЂРѕСЃ РїРѕРІС‚РѕСЂСЏРµС‚СЃСЏ РґРІР°Р¶РґС‹ РґР»СЏ РёСЃРєР»СЋС‡РµРЅРёСЏ РѕС€РёР±РєРё РїСЂРё РµРіРѕ РІРІРѕРґРµ
+ask_encryption_password opt_parseData = syncUI $ pauseEverything $ do
   withoutEcho $ go where
     go = do myPutStr "\n  Enter encryption password:"
             hFlush stdout
@@ -158,14 +176,14 @@ ask_encryption_password opt_parseData = syncUI $ pauseTiming $ do
                       go
               else return answer
 
--- |Запрос пароля для распаковки. Используется невидимый ввод
-ask_decryption_password opt_parseData = syncUI $ pauseTiming $ do
+-- |Р—Р°РїСЂРѕСЃ РїР°СЂРѕР»СЏ РґР»СЏ СЂР°СЃРїР°РєРѕРІРєРё. РСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ РЅРµРІРёРґРёРјС‹Р№ РІРІРѕРґ
+ask_decryption_password opt_parseData = syncUI $ pauseEverything $ do
   withoutEcho $ do
   myPutStr "\n  Enter decryption password:"
   hFlush stdout
   getHiddenLine >>== opt_parseData 't'
 
--- |Ввести строку, не отображая её на экране
+-- |Р’РІРµСЃС‚Рё СЃС‚СЂРѕРєСѓ, РЅРµ РѕС‚РѕР±СЂР°Р¶Р°СЏ РµС‘ РЅР° СЌРєСЂР°РЅРµ
 getHiddenLine = go ""
   where go s = do c <- getHiddenChar
                   case c of
@@ -176,9 +194,9 @@ getHiddenLine = go ""
 
 #ifdef FREEARC_WIN
 
--- |Перевести консоль в режим невидимого ввода
+-- |РџРµСЂРµРІРµСЃС‚Рё РєРѕРЅСЃРѕР»СЊ РІ СЂРµР¶РёРј РЅРµРІРёРґРёРјРѕРіРѕ РІРІРѕРґР°
 withoutEcho = id
--- |Ввести символ без эха
+-- |Р’РІРµСЃС‚Рё СЃРёРјРІРѕР» Р±РµР· СЌС…Р°
 getHiddenChar = liftM (chr.fromEnum) c_getch
 foreign import ccall unsafe "conio.h getch"
    c_getch :: IO CInt
@@ -205,16 +223,16 @@ withoutEcho action = do
 
 
 ----------------------------------------------------------------------------------------------------
----- Ввод/вывод комментариев к архиву  -------------------------------------------------------------
+---- Р’РІРѕРґ/РІС‹РІРѕРґ РєРѕРјРјРµРЅС‚Р°СЂРёРµРІ Рє Р°СЂС…РёРІСѓ  -------------------------------------------------------------
 ----------------------------------------------------------------------------------------------------
 
--- |Вывести на экран комментарий к архиву
+-- |Р’С‹РІРµСЃС‚Рё РЅР° СЌРєСЂР°РЅ РєРѕРјРјРµРЅС‚Р°СЂРёР№ Рє Р°СЂС…РёРІСѓ
 uiPrintArcComment arcComment = do
   when (arcComment>"") $ do
     myPutStrLn arcComment
 
--- |Ввести с stdin комментарий к архиву
-uiInputArcComment old_comment = syncUI $ pauseTiming $ do
+-- |Р’РІРµСЃС‚Рё СЃ stdin РєРѕРјРјРµРЅС‚Р°СЂРёР№ Рє Р°СЂС…РёРІСѓ
+uiInputArcComment old_comment = syncUI $ pauseEverything $ do
   myPutStrLn "Enter archive comment, ending with \".\" on separate line:"
   hFlush stdout
   let go xs = do line <- myGetLine
@@ -238,15 +256,26 @@ withTString  = withCString
 type TString = CString
 #endif
 
+
 -- |Set console title
 setConsoleTitle title = do
   withTString title c_SetConsoleTitle
 
 -- |Set console title (external)
-foreign import ccall unsafe "Environment.h EnvSetConsoleTitle"
+foreign import ccall safe "Environment.h EnvSetConsoleTitle"
   c_SetConsoleTitle :: TString -> IO ()
 
 -- |Reset console title
-foreign import ccall unsafe "Environment.h EnvResetConsoleTitle"
+foreign import ccall safe "Environment.h EnvResetConsoleTitle"
   resetConsoleTitle :: IO ()
+
+
+-- |Synchronize console access
+withConsoleAccess  =  bracket_ c_SynchronizeConio_Enter c_SynchronizeConio_Leave
+
+-- |Enter & leave console access mutex
+foreign import ccall safe "Compression/External/C_External.h SynchronizeConio_Enter"
+  c_SynchronizeConio_Enter :: IO ()
+foreign import ccall safe "Compression/External/C_External.h SynchronizeConio_Leave"
+  c_SynchronizeConio_Leave :: IO ()
 

@@ -1,0 +1,501 @@
+<html>
+
+<head>
+<meta http-equiv=Content-Type content="text/html; charset=utf-8">
+<meta name=Generator content="Microsoft Word 12 (filtered)">
+<title>FreeArc 0.50 GUI</title>
+<style>
+<!--
+ /* Font Definitions */
+ @font-face
+	{font-family:Wingdings;
+	panose-1:5 0 0 0 0 0 0 0 0 0;}
+@font-face
+	{font-family:"Cambria Math";
+	panose-1:2 4 5 3 5 4 6 3 2 4;}
+@font-face
+	{font-family:Cambria;
+	panose-1:2 4 5 3 5 4 6 3 2 4;}
+ /* Style Definitions */
+ p.MsoNormal, li.MsoNormal, div.MsoNormal
+	{margin-top:0cm;
+	margin-right:0cm;
+	margin-bottom:10.0pt;
+	margin-left:0cm;
+	line-height:115%;
+	font-size:11.0pt;
+	font-family:"Times New Roman","serif";}
+h1
+	{mso-style-link:"Заголовок 1 Знак";
+	margin-top:24.0pt;
+	margin-right:0cm;
+	margin-bottom:0cm;
+	margin-left:0cm;
+	margin-bottom:.0001pt;
+	line-height:115%;
+	page-break-after:avoid;
+	font-size:14.0pt;
+	font-family:"Cambria","serif";
+	color:#365F91;}
+h2
+	{mso-style-link:"Заголовок 2 Знак";
+	margin-top:10.0pt;
+	margin-right:0cm;
+	margin-bottom:0cm;
+	margin-left:0cm;
+	margin-bottom:.0001pt;
+	line-height:115%;
+	page-break-after:avoid;
+	font-size:13.0pt;
+	font-family:"Cambria","serif";
+	color:#4F81BD;}
+h3
+	{mso-style-link:"Заголовок 3 Знак";
+	margin-top:10.0pt;
+	margin-right:0cm;
+	margin-bottom:0cm;
+	margin-left:0cm;
+	margin-bottom:.0001pt;
+	line-height:115%;
+	page-break-after:avoid;
+	font-size:11.0pt;
+	font-family:"Cambria","serif";
+	color:#4F81BD;}
+a:link, span.MsoHyperlink
+	{color:blue;
+	text-decoration:underline;}
+a:visited, span.MsoHyperlinkFollowed
+	{color:purple;
+	text-decoration:underline;}
+p.MsoListParagraph, li.MsoListParagraph, div.MsoListParagraph
+	{margin-top:0cm;
+	margin-right:0cm;
+	margin-bottom:10.0pt;
+	margin-left:36.0pt;
+	line-height:115%;
+	font-size:11.0pt;
+	font-family:"Times New Roman","serif";}
+span.1
+	{mso-style-name:"Заголовок 1 Знак";
+	mso-style-link:"Заголовок 1";
+	font-family:"Cambria","serif";
+	color:#365F91;
+	font-weight:bold;}
+span.2
+	{mso-style-name:"Заголовок 2 Знак";
+	mso-style-link:"Заголовок 2";
+	font-family:"Cambria","serif";
+	color:#4F81BD;
+	font-weight:bold;}
+span.3
+	{mso-style-name:"Заголовок 3 Знак";
+	mso-style-link:"Заголовок 3";
+	font-family:"Cambria","serif";
+	color:#4F81BD;
+	font-weight:bold;}
+p.msolistparagraphcxspfirst, li.msolistparagraphcxspfirst, div.msolistparagraphcxspfirst
+	{mso-style-name:msolistparagraphcxspfirst;
+	margin-top:0cm;
+	margin-right:0cm;
+	margin-bottom:0cm;
+	margin-left:36.0pt;
+	margin-bottom:.0001pt;
+	line-height:115%;
+	font-size:11.0pt;
+	font-family:"Times New Roman","serif";}
+p.msolistparagraphcxspmiddle, li.msolistparagraphcxspmiddle, div.msolistparagraphcxspmiddle
+	{mso-style-name:msolistparagraphcxspmiddle;
+	margin-top:0cm;
+	margin-right:0cm;
+	margin-bottom:0cm;
+	margin-left:36.0pt;
+	margin-bottom:.0001pt;
+	line-height:115%;
+	font-size:11.0pt;
+	font-family:"Times New Roman","serif";}
+p.msolistparagraphcxsplast, li.msolistparagraphcxsplast, div.msolistparagraphcxsplast
+	{mso-style-name:msolistparagraphcxsplast;
+	margin-top:0cm;
+	margin-right:0cm;
+	margin-bottom:10.0pt;
+	margin-left:36.0pt;
+	line-height:115%;
+	font-size:11.0pt;
+	font-family:"Times New Roman","serif";}
+span.ButtonChar
+	{mso-style-name:"Button Char";
+	mso-style-link:Button;}
+p.Button, li.Button, div.Button
+	{mso-style-name:Button;
+	mso-style-link:"Button Char";
+	margin-top:0cm;
+	margin-right:0cm;
+	margin-bottom:10.0pt;
+	margin-left:0cm;
+	line-height:115%;
+	font-size:11.0pt;
+	font-family:"Times New Roman","serif";}
+p.msopapdefault, li.msopapdefault, div.msopapdefault
+	{mso-style-name:msopapdefault;
+	margin-right:0cm;
+	margin-bottom:10.0pt;
+	margin-left:0cm;
+	line-height:115%;
+	font-size:12.0pt;
+	font-family:"Times New Roman","serif";}
+p.msochpdefault, li.msochpdefault, div.msochpdefault
+	{mso-style-name:msochpdefault;
+	margin-right:0cm;
+	margin-left:0cm;
+	font-size:10.0pt;
+	font-family:"Times New Roman","serif";}
+p.Heading1, li.Heading1, div.Heading1
+	{mso-style-name:"Heading 1";
+	mso-style-link:"Heading 1 Char";
+	margin-top:0cm;
+	margin-right:0cm;
+	margin-bottom:10.0pt;
+	margin-left:0cm;
+	line-height:115%;
+	font-size:11.0pt;
+	font-family:"Times New Roman","serif";}
+span.Heading1Char
+	{mso-style-name:"Heading 1 Char";
+	mso-style-link:"Heading 1";
+	font-family:"Cambria","serif";
+	color:#365F91;
+	font-weight:bold;}
+p.Heading2, li.Heading2, div.Heading2
+	{mso-style-name:"Heading 2";
+	mso-style-link:"Heading 2 Char";
+	margin-top:0cm;
+	margin-right:0cm;
+	margin-bottom:10.0pt;
+	margin-left:0cm;
+	line-height:115%;
+	font-size:11.0pt;
+	font-family:"Times New Roman","serif";}
+span.Heading2Char
+	{mso-style-name:"Heading 2 Char";
+	mso-style-link:"Heading 2";
+	font-family:"Cambria","serif";
+	color:#4F81BD;
+	font-weight:bold;}
+p.Heading3, li.Heading3, div.Heading3
+	{mso-style-name:"Heading 3";
+	mso-style-link:"Heading 3 Char";
+	margin-top:0cm;
+	margin-right:0cm;
+	margin-bottom:10.0pt;
+	margin-left:0cm;
+	line-height:115%;
+	font-size:11.0pt;
+	font-family:"Times New Roman","serif";}
+span.Heading3Char
+	{mso-style-name:"Heading 3 Char";
+	mso-style-link:"Heading 3";
+	font-family:"Cambria","serif";
+	color:#4F81BD;
+	font-weight:bold;}
+.MsoChpDefault
+	{font-size:10.0pt;}
+.MsoPapDefault
+	{margin-bottom:10.0pt;
+	line-height:115%;}
+@page Section1
+	{size:595.3pt 841.9pt;
+	margin:2.0cm 42.5pt 2.0cm 3.0cm;}
+div.Section1
+	{page:Section1;}
+-->
+</style>
+
+<meta http-equiv=Content-Language content=ru>
+<meta http-equiv=Content-Language content=ru>
+</head>
+
+<body lang=RU link=blue vlink=purple>
+
+<div class=Section1>
+
+<h1>Введение</h1>
+
+<p class=MsoNormal><span lang=EN-US>FreeArc </span>позволяет просматривать
+содержимое диска и архивов (только в своём собственном формате <span
+lang=EN-US>.arc), </span>и выполнять над архивами следующие операции<span
+lang=EN-US>:</span></p>
+
+<p class=MsoListParagraph style='text-indent:-18.0pt'><span lang=EN-US
+style='font-family:Symbol'>·</span><span lang=EN-US style='font-size:7.0pt;
+line-height:115%'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span>Создание
+архивов и добавление файлов к архиву</p>
+
+<p class=MsoListParagraph style='text-indent:-18.0pt'><span lang=EN-US
+style='font-family:Symbol'>·</span><span lang=EN-US style='font-size:7.0pt;
+line-height:115%'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span>Модификация
+архива (переупаковка, зашифровка/дешифровка, изменение размера <span
+lang=EN-US>Recovery Record </span>и т.д.)</p>
+
+<p class=MsoListParagraph style='text-indent:-18.0pt'><span lang=EN-US
+style='font-family:Symbol'>·</span><span lang=EN-US style='font-size:7.0pt;
+line-height:115%'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span>Объединение
+вместе нескольких архивов</p>
+
+<p class=MsoListParagraph style='text-indent:-18.0pt'><span lang=EN-US
+style='font-family:Symbol'>·</span><span lang=EN-US style='font-size:7.0pt;
+line-height:115%'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span>Получение
+информации об архиве</p>
+
+<p class=MsoListParagraph style='text-indent:-18.0pt'><span lang=EN-US
+style='font-family:Symbol'>·</span><span lang=EN-US style='font-size:7.0pt;
+line-height:115%'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span>Удаление
+файлов из архива</p>
+
+<p class=MsoListParagraph style='text-indent:-18.0pt'><span lang=EN-US
+style='font-family:Symbol'>·</span><span lang=EN-US style='font-size:7.0pt;
+line-height:115%'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span>Тестирование
+архивов</p>
+
+<p class=MsoListParagraph style='text-indent:-18.0pt'><span lang=EN-US
+style='font-family:Symbol'>·</span><span lang=EN-US style='font-size:7.0pt;
+line-height:115%'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span>Распаковка
+архивов</p>
+
+<p class=MsoNormal>После того, как <span lang=EN-US>FreeArc </span>начал
+выполнять операцию (архивации, распаковки и т.д.), вы можете перевести её в
+фоновое исполнение нажатием на кнопку <span class=ButtonChar><span
+style='background:aqua'>Фоном</span></span> и продолжить работу в <span
+lang=EN-US>FreeArc. </span>Можно также просто переключиться на окошко <span
+lang=EN-US>FreeArc, </span>кликнув по нему, или отвести окно выполнения
+операции в сторону от окна <span lang=EN-US>FreeArc.</span></p>
+
+<p class=MsoNormal>Пока выполняется одна операция, вы можете запускать на
+выполнение вторую, третью и т.д. Все запущенные операции организуются в очередь
+и выполняются строго в порядке запуска.</p>
+
+<p class=MsoNormal>Все поля ввода в программе поддерживают сохранение истории.
+При этом введённые данные записываются в файл <span lang=EN-US>freearc.history </span>сразу
+после закрытия диалога и считываются оттуда при его открытии. Поэтому настройки
+и история ввода никогда не теряется и является глобальными для всех запущенных
+копий <span lang=EN-US>FreeArc.</span> Единственным исключением из этого
+правила являются пароли - они сохраняются в оперативной памяти и требуют ввода
+заново при каждом запуске программы<span lang=EN-US>. </span></p>
+
+<p class=MsoNormal>В верхней части окна файл-менеджера располагается строка
+навигации<span lang=EN-US>. </span>В ней можно ввести имя каталога или архива
+(или даже каталога внутри архива) и нажать <span lang=EN-US>Enter </span>чтобы
+перейти в него напрямую. В частности, для того<span lang=EN-US>, </span>чтобы <span
+style='background:yellow'>открыть архив напрямую из интернета</span>, нужно
+ввести здесь его <span lang=EN-US>URL и </span>нажать <span lang=EN-US>Enter.</span>
+История этой строки ввода автоматически сохраняет имена всех архивов, в которых
+мы побывали, кроме того в неё можно добавить текущий каталог (или каталог
+внутри архива), нажав на кнопку <span class=ButtonChar><span style='background:
+aqua'>Сохранить</span></span><span lang=EN-US>. </span>Эта история также
+сохраняется на диске и является глобальной, <span lang=EN-US>FreeArc </span>перечитывает
+её с диска при каждом переходе в другой каталог или нажатии на кнопку <span
+class=ButtonChar><span style='background:aqua'>Обновить</span></span><span
+lang=EN-US>. </span>Благодаря этому вы можете имитировать технологию <span
+lang=EN-US>Drag&amp;Drop, </span>запустив две копии <span lang=EN-US>FreeArc. </span>В
+одной из них сохраняете нужный каталог/архив кнопкой <span class=ButtonChar><span
+style='background:aqua'>Сохранить</span></span><span lang=EN-US>, </span>а в
+другой извлекаете его из истории. Аналогично, вы можете легко перейти в
+каталог, куда только что происходила распаковка, или в архив, куда только что
+происходила упаковка, выбрав их из истории.</p>
+
+<h2>Создание архивов и добавление файлов к архиву</h2>
+
+<p class=MsoNormal>Для архивации вы должны выделить файлы и/или каталоги на
+диске (не внутри архива!) и нажать на кнопку <span class=ButtonChar><span
+style='background:aqua'>Упаковать</span></span>. Если ничего не выделено -
+будут сжаты все файлы и каталоги. Появится диалог, в котором вы можете выбрать
+степень сжатия, режим шифрования и другие параметры. Обратите внимание, что вы
+можете скрыть некоторые разделы этого диалога и это будет означать, что
+соответствующая группа настроек вообще не будет применена. Например, раздел
+шифрования по умолчанию закрыт и это означает, что по умолчанию архивы не
+шифруются. Однако как только вы его откроете - шифрование будет включено со
+всеми указанными там настройками<span lang=EN-US>. </span>Это позволяет вам
+иметь все ваши стандартные настройки приуготовленными и включать их только там,
+где нужно.</p>
+
+<p class=MsoNormal>Поле имени выходного архива может также включать каталог
+внутри архива - это позволяет быстро упаковывать файлы точно в нужное место,
+просто выбирая его из истории (вместо того, чтобы отдельно выбирать сначала
+архив, а затем каталог внутри него в следующем поле ввода).</p>
+
+<h3>Шифрование</h3>
+
+<p class=MsoNormal>Хотя в таких популярных алгоритмах шифрования, как <span
+lang=EN-US>AES, </span>не известно никаких уязвимостей, существует крошечная
+вероятность того, что они могут быть найдены в светлом будущем. Поэтому <span
+lang=EN-US>FreeArc </span>предоставляет вам возможность использовать ещё три
+наиболее серьёзных алгоритма шифрования - <span lang=EN-US>Serpent</span>, <span
+lang=EN-US>Twofish и Blowfish</span>, и даже шифровать данные несколькими
+алгоритмами последовательно (при этом выход первого алгоритма шифруется вторым
+и т.д.). Файл, зашифрованный несколькими алгоритмами, может быть вскрыт, только
+если уязвимости будут найдены во всех них. Кроме того, надёжность шифрования
+можно увеличить, увеличив кол-во раундов шифрования по сравнению со
+стандартным, например<span lang=EN-US> &quot;aes:r100&quot;. </span>Разумеется,
+оба способа увеличения надёжности выливаются в уменьшение скорости работы
+шифрования (для справки<span lang=EN-US>: </span>скорость одиночного алгоритма
+с настройками по умолчанию <span lang=EN-US>- </span>порядка <span lang=EN-US>2</span>0
+мб/с на 1ГГц <span lang=EN-US>CPU).</span></p>
+
+<p class=MsoNormal>Далее, размер ключа в <span lang=EN-US>AES, Serpent </span>и
+<span lang=EN-US>Twofish - </span>до 256 бит, а в <span lang=EN-US>Blowfish</span>
+- до 448 бит<span lang=EN-US>.</span> Это&nbsp; означает, что пароль, который
+вы должны ввести для полного использования криптостойкости <span lang=EN-US>AES</span>,
+должен содержать <span lang=EN-US>~50 </span>совершенно случайных букв, или
+200-300 символов осмысленного текста. И часто вы используете такие пароли<span
+lang=EN-US>? </span><span lang=EN-US style='font-family:Wingdings'>J</span><span
+lang=EN-US> </span>Для реального использования криптостойкости современных
+алгоритмов шифрования <span lang=EN-US>FreeArc </span>поддерживает файлы-ключи
+- фактически, это такие огромные пароли, записанные во внешний файл. Кнопка <span
+class=ButtonChar><span style='background:aqua'>Создать</span></span> генерирует
+1 кб криптографически случайных данных и записывает их в указанный вами файл.
+При шифрации данных с использованием файла-ключа ваши данные гарантированно
+защищены от любой техники подбора пароля по словарю - единственным способом
+расшифровать данные остаётся перебрать все 2<span lang=EN-US>^</span>256
+вариантов ключа или найти уязвимость в алгоритме шифрования<span lang=EN-US> (</span>как
+от этого защититься описано выше). При этом пароль и файл-ключ можно использовать
+одновременно.</p>
+
+<p class=MsoNormal>Разумеется, файл-ключ надо беречь как зеницу ока. Одним из
+возможных вариантов защиты может быть поместить его на флэш-брелок с поддержкой
+физической защиты информации.</p>
+
+<p class=MsoNormal>Кроме того, я рекомендую вам включить шифрование каталога
+архива - это не позволит злоумышленнику узнать даже имена файлов, которые
+находятся в архиве. Вы же можете входить в архивы с зашифрованным каталогом так
+же легко, как и в любые другие - просто зайдите в диалог Настройки и
+перечислите в разделе Дешифровка все пароли/ключевые файлы, используемые в
+ваших архивах, и забудьте о них (до следующего запуска <span lang=EN-US>FreeArc).</span></p>
+
+<h3>Дешифровка</h3>
+
+<p class=MsoNormal>Пароли и ключевые файлы, указанные в этом разделе, будут
+использоваться только для расшифровки зашифрованных данных. Если вы хотите
+использовать один и тот же пароль и для шифрования, и для расшифровки - укажите
+его в обоих разделах. Поскольку настройки этого раздела запоминаются, вы можете
+забить (через диалог Настройки) в этот список сразу все пароли и ключевые
+файлы, которые вам могут понадобиться, и забыть о необходимости их ввода до
+следующего запуска <span lang=EN-US>FreeArc</span> - чертовски удобно! Даже
+когда эта секция закрыта, указанные в ней пароли/ключевые файлы всё равно
+используются для расшифровки данных. Вам может понадобиться открыть её только в
+двух случаях - для того, чтобы затребовать расшифровку архива в команде
+модификации (см. ниже), или для того, чтобы отредактировать эти данные.</p>
+
+<h3><span lang=EN-US>Защита данных</span></h3>
+
+<p class=MsoNormal>Подобно <span lang=EN-US>RAR, FreeArc </span>может
+восстанавливать ошибки в архивах, возникшие из-за сбоев в магнитных носителях
+или при передаче информации, используя для этого <span lang=EN-US>Recovery
+Record - </span>дополнительные данные, записываемые в конец архива. В этом
+разделе вы можете настроить её размер или наоборот убрать её из уже
+существующего архива. Размер может быть задан в процентах от размера архива<span
+lang=EN-US>, </span>байтах или выбран автоматически (от 1% до 4%, в зависимости
+от размера архива). </p>
+
+<p class=MsoNormal>Кроме того, можно добавить к архиву минимальную <span
+lang=EN-US>Recovery Record </span>размером всего в 0.1%. Её наличие не позволит
+восстановить архив сам по себе, но его можно будет быстро починить по оригиналу
+из интернета, перезагрузив только сбойные его части. Таким образом, минимальная
+<span lang=EN-US>Recovery Record</span> очень удобна для архивов, выкладываемых
+в интернет - добавляя минимум к их размеру, она тем не менее обеспечивает
+надёжную защиту от сбоев при выкачивании из интернета.</p>
+
+<h2>Модификация архива</h2>
+
+<p class=MsoNormal>В отличие от других архиваторов, с <span lang=EN-US>FreeArc </span>вы
+можете изменить в уже существующем архиве всё - от степени сжатия до метода
+шифрования. Для этого надо выбрать один или несколько архивов в файл-менеджере,
+или зайти в архив, и нажать кнопку <span class=ButtonChar><span
+style='background:aqua'>Модифицировать</span></span>. Как всегда, для включения
+группы настроек её надо <открыть>. Если вы хотите перепаковать данные -
+откройте группу <span class=ButtonChar><span style='background:aqua'>Сжатие</span></span>
+и выберите там нужный вам алгоритм. Если вы хотите зашифровать архив или
+наоборот снять с него шифрование - откройте, соответственно, группу <span
+class=ButtonChar><span style='background:aqua'>Шифрование</span></span> или <span
+class=ButtonChar><span style='background:aqua'>Дешифрование</span></span>. Если
+вам нужно перешифровать архив заново - то откройте обе группы и введите старый
+пароль/файл-ключ в группу Дешифрование, а новые настройки - в группу
+Шифрование. И т.д. Учтите, что на данный момент перепаковка без перешифрования,
+как и перешифрование без переупаковки невозможно (первое невозможно
+принципиально, второе - чисто техническое, временное ограничение).</p>
+
+<p class=MsoNormal>Если вы выделили сразу несколько архивов - то они все будут
+перепакованы, перешифрованны:<span lang=EN-US>,</span> перевязаны ленточкой и
+доставлены на дом <span lang=EN-US style='font-family:Wingdings'>J</span><span
+lang=EN-US>. </span>Если ни один файл не выбран, то команда обрабатывает все
+архивы в текущем каталоге.</p>
+
+<h2>Объединение вместе нескольких архивов</h2>
+
+<p class=MsoNormal><span lang=EN-US>FreeArc </span>также умеет объединять
+существующие архивы в один - и делает куда быстрее, чем если бы вы их
+распаковали и упаковали заново. При этом дубликаты (файлы с одинаковыми
+именами) удаляются автоматически. Если файлы добавляются в уже существующий
+архив, то файлы из новых архивов будут при этом иметь приоритет (т.е.
+происходит обновление старого архива новыми данными). Для выполнения этой
+операции вы должны отметить объединяемые архивы и выбрать из меню <span
+class=ButtonChar><span style='background:aqua'>Файл</span></span> операцию <span
+class=ButtonChar><span style='background:aqua'>Объединить</span></span>. При
+отсутствии выделения объединяются все архивы в текущем каталоге.</p>
+
+<h2>Получение информации об архиве</h2>
+
+<p class=MsoNormal>Команда <span class=ButtonChar><span style='background:aqua'>АркИнфо</span></span>
+выводит информацию о текущем архиве. Если вам там что-то непонятно <span
+lang=EN-US>- </span>спрашивайте <span lang=EN-US style='font-family:Wingdings'>J</span>.
+Обратите особое внимание на поле <span class=ButtonChar><span style='background:
+aqua'>ОЗУ распаковки</span></span> - это сколько памяти необходимо иметь для распаковки
+этого архива (не считая памяти для операционной системы и т.п.). Если эта цифра
+больше, чем ¾ объёма вашего ОЗУ<span lang=EN-US>, </span>то мой вам совет<span
+lang=EN-US> - </span>заведите себе богатую любовницу<span lang=EN-US> :D</span></p>
+
+<h2>Удаление файлов</h2>
+
+<p class=MsoNormal><span lang=EN-US>FreeArc </span>умеет удалять файлы и
+каталоги из архивов и файлы с диска (но не наоборот! <span lang=EN-US
+style='font-family:Wingdings'>J</span>)<span lang=EN-US>. </span>Удаление из
+архива - обычная операция, которая ставится в очередь (её выполнение может быть
+достаточно длительным, поскольку удаление файлов из архива требует перепаковки
+тех солид-блоков, куда они входили), но <span lang=EN-US>FreeArc</span> умеет <заглядывать в будущее>и
+сразу убирает с экрана имена тех файлов, которые будут удалены.</p>
+
+<h2>Тестирование архивов</h2>
+
+<p class=MsoNormal>Ставит в очередь тестирование текущего архива, или
+выделенных файлов в текущем архиве (если что-то выделено), или выделенных/всех
+архивов в текущем каталоге. В общем, как повезёт <span lang=EN-US
+style='font-family:Wingdings'>J</span></p>
+
+<h2>Распаковка архивов</h2>
+
+<p class=MsoNormal>Правила выбора распаковываемых архивов или файлов внутри
+архива - точно такие же, как при тестировании. Даже непонятно, зачем я написал
+отдельный раздел <span lang=EN-US style='font-family:Wingdings'>J</span></p>
+
+<p class=MsoNormal><b><span style='font-size:13.0pt;line-height:115%;
+font-family:"Cambria","serif";color:#4F81BD'>&nbsp;</span></b></p>
+
+<p class=MsoNormal><b><span style='font-size:13.0pt;line-height:115%;
+font-family:"Cambria","serif";color:#4F81BD'>Настройки</span></b></p>
+
+<p class=MsoNormal>Диалог настроек позволяет выбрать язык интерфейса, а также
+симпортировать языковой файл, созданный для нашего заклятого друга - <span
+lang=EN-US>7-zip </span>и тут же отредактировать его. Кроме того, здесь вы
+можете ввести все пароли/ключевые файлы, используемые для расшифровки.
+Разумеется, список паролей надо вводить заново при каждом запуске <span
+lang=EN-US>FreeArc - </span>на диске он не запоминается.</p>
+
+<p class=MsoNormal>Наконец, здесь вы можете задать имя лог-файла, куда <span
+lang=EN-US>FreeArc </span>будет стучать обо всех подробностях вашей с ним
+интимной жизни. В разработке также находится модуль, выцепляющий из лог-файла
+все пароли и автоматически публикующий их в вашем блоге. Наличие такого модуля
+является обязательным условием для регистрации программы в ФАПСИ. </p>
+
+</div>
+
+</body>
+
+</html>

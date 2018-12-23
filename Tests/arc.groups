@@ -390,7 +390,6 @@ $compressed
 *.ark
 *.hpk
 *.cab
-*.bsa
 *.bs2
 *.bsn
 *.ain

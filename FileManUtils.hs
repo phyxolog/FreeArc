@@ -5,12 +5,15 @@ module FileManUtils where
 
 import Prelude hiding (catch)
 import Control.Concurrent
-import Control.Exception
+import Control.OldException
 import Control.Monad
 import Data.Char
 import Data.IORef
 import Data.List
 import Data.Maybe
+import Foreign.C
+import Foreign.Marshal
+import System.IO.Unsafe
 
 import Graphics.UI.Gtk
 import Graphics.UI.Gtk.ModelView as New
@@ -22,13 +25,19 @@ import FileInfo
 import Options
 import UIBase
 import UI
-import ArhiveDirectory
+import Arhive7zLib
+
+
+-- |РџР°СЂРѕР»Рё С€РёС„СЂРѕРІР°РЅРёСЏ Рё СЂР°СЃС€РёС„СЂРѕРІРєРё
+encryptionPassword  =  unsafePerformIO$ newIORef$ ""
+decryptionPassword  =  unsafePerformIO$ newIORef$ ""
+
 
 ----------------------------------------------------------------------------------------------------
----- Текущее состояние файл-менеджера --------------------------------------------------------------
+---- РўРµРєСѓС‰РµРµ СЃРѕСЃС‚РѕСЏРЅРёРµ С„Р°Р№Р»-РјРµРЅРµРґР¶РµСЂР° --------------------------------------------------------------
 ----------------------------------------------------------------------------------------------------
 
--- |Текущее состояние файл-менеджера: список выбранных файлов, общий список файлов и прочая информация
+-- |РўРµРєСѓС‰РµРµ СЃРѕСЃС‚РѕСЏРЅРёРµ С„Р°Р№Р»-РјРµРЅРµРґР¶РµСЂР°: СЃРїРёСЃРѕРє РІС‹Р±СЂР°РЅРЅС‹С… С„Р°Р№Р»РѕРІ, РѕР±С‰РёР№ СЃРїРёСЃРѕРє С„Р°Р№Р»РѕРІ Рё РїСЂРѕС‡Р°СЏ РёРЅС„РѕСЂРјР°С†РёСЏ
 data FM_State = FM_State { fm_window_      :: Maybe Window
                          , fm_view         :: TreeView
                          , fm_model        :: New.ListStore FileData
@@ -39,10 +48,11 @@ data FM_State = FM_State { fm_window_      :: Maybe Window
                          , fm_history      :: HistoryFile
                          , fm_onChdir      :: [IO()]
                          , fm_sort_order   :: String
+                         , fm_passwords    :: [String]                       -- РїР°СЂРѕР»Рё, РІРІРµРґС‘РЅРЅС‹Рµ РїРѕР»СЊР·РѕРІР°С‚РµР»РµРј Р·Р° РІСЂРµРјСЏ С‚РµРєСѓС‰РµР№ СЃРµСЃСЃРёРё
                          , subfm           :: SubFM_State
                          }
 
--- |Текущее состояние файл-менеджера: информация об отображаемом архиве или каталоге диска
+-- |РўРµРєСѓС‰РµРµ СЃРѕСЃС‚РѕСЏРЅРёРµ С„Р°Р№Р»-РјРµРЅРµРґР¶РµСЂР°: РёРЅС„РѕСЂРјР°С†РёСЏ РѕР± РѕС‚РѕР±СЂР°Р¶Р°РµРјРѕРј Р°СЂС…РёРІРµ РёР»Рё РєР°С‚Р°Р»РѕРіРµ РґРёСЃРєР°
 data SubFM_State = FM_Archive   { subfm_archive  :: ArchiveInfo
                                 , subfm_arcname  :: FilePath
                                 , subfm_arcdir   :: FilePath
@@ -51,7 +61,7 @@ data SubFM_State = FM_Archive   { subfm_archive  :: ArchiveInfo
                  | FM_Directory { subfm_dir      :: FilePath
                                 }
 
--- |True, если FM сейчас показывает архив
+-- |True, РµСЃР»Рё FM СЃРµР№С‡Р°СЃ РїРѕРєР°Р·С‹РІР°РµС‚ Р°СЂС…РёРІ
 isFM_Archive (FM_State {subfm=FM_Archive{}}) = True
 isFM_Archive _                               = False
 
@@ -60,76 +70,87 @@ fm_arcname = subfm_arcname.subfm
 fm_arcdir  = subfm_arcdir .subfm
 fm_dir     = subfm_dir    .subfm
 
--- |Окно файл-менеджера
+-- |РћРєРЅРѕ С„Р°Р№Р»-РјРµРЅРµРґР¶РµСЂР°
 fm_window FM_State{fm_window_ = Just window} = window
 
--- |Текущий архив+каталог в нём или каталог на диске
+-- |РўРµРєСѓС‰РёР№ Р°СЂС…РёРІ+РєР°С‚Р°Р»РѕРі РІ РЅС‘Рј РёР»Рё РєР°С‚Р°Р»РѕРі РЅР° РґРёСЃРєРµ
 fm_current fm | isFM_Archive fm = fm_arcname fm </> fm_arcdir fm
               | otherwise       = fm_dir     fm
 
--- |Текущий каталог, показываемый в FM, или каталог, в котором находится текущий архив
+-- |РўРµРєСѓС‰РёР№ РєР°С‚Р°Р»РѕРі, РїРѕРєР°Р·С‹РІР°РµРјС‹Р№ РІ FM, РёР»Рё РєР°С‚Р°Р»РѕРі, РІ РєРѕС‚РѕСЂРѕРј РЅР°С…РѕРґРёС‚СЃСЏ С‚РµРєСѓС‰РёР№ Р°СЂС…РёРІ
 fm_curdir fm | isFM_Archive fm = fm_arcname fm .$takeDirectory
              | otherwise       = fm_dir     fm
 
--- |Изменить имя архива, открытого в FM
+-- |РР·РјРµРЅРёС‚СЊ РёРјСЏ Р°СЂС…РёРІР°, РѕС‚РєСЂС‹С‚РѕРіРѕ РІ FM
 fm_changeArcname arcname fm@(FM_State {subfm=subfm@FM_Archive{}}) =
                          fm {subfm = subfm {subfm_arcname=arcname}}
 
+-- |РЎРѕС…СЂР°РЅРёС‚СЊ СЃРїРёСЃРѕРє РїР°СЂРѕР»РµР№ СЂР°СЃС€РёС„СЂРѕРІРєРё, РёСЃРїРѕР»СЊР·РѕРІР°РЅРЅС‹С… РїСЂРё РІС‹РїРѕР»РЅРµРЅРёРё РєРѕРјР°РЅРґС‹
+fmSaveDecryptionPasswords fm' command = do
+  passwords <- get_opt_decryption_passwords command    -- СЃРѕС…СЂР°РЅРёРј СЃРїРёСЃРѕРє РїР°СЂРѕР»РµР№, РІРІРµРґС‘РЅРЅС‹С… РїРѕР»СЊР·РѕРІР°С‚РµР»РµРј
+  fm' .= \fm -> fm {fm_passwords = take 10 passwords}  -- ... РїРѕ РєСЂР°Р№РЅРµР№ РјРµСЂРµ РїРµСЂРІС‹Рµ 10 РёР· РЅРёС…
+
+-- |РџРѕР»СѓС‡РёС‚СЊ СЃРїРёСЃРѕРє РїР°СЂРѕР»РµР№ СЂР°СЃС€РёС„СЂРѕРІРєРё
+fmGetDecryptionPasswords fm' = do
+  xpwd'     <- val decryptionPassword        -- РїР°СЂРѕР»СЊ СЂР°СЃРїР°РєРѕРІРєРё, РІРІРµРґС‘РЅРЅС‹Р№ РІ Settings
+  passwords <- fm_passwords `fmap` val fm'   -- РїР°СЂРѕР»Рё, РІРІРµРґС‘РЅРЅС‹Рµ РїРѕР»СЊР·РѕРІР°С‚РµР»РµРј РІ С‚РµРєСѓС‰РµР№ СЃРµСЃСЃРёРё
+  return ((insertAt 1 (xpwd' &&& [xpwd']) (delete xpwd' passwords)))   -- РЅР° РїРµСЂРІРѕРј РјРµСЃС‚Рµ РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ РїРѕСЃР»РµРґРЅРёР№ РїР°СЂРѕР»СЊ, РІРІРµРґС‘РЅРЅС‹Р№ РІСЂСѓС‡РЅСѓСЋ - РїРѕСЃРєРѕР»СЊРєСѓ 7z.dll РїРѕРґРґРµСЂР¶РёРІР°РµС‚ С‚РѕР»СЊРєРѕ РѕРґРёРЅ РїР°СЂРѕР»СЊ
+
 
 ----------------------------------------------------------------------------------------------------
----- Операции над именами каталогов/файлов ---------------------------------------------------------
+---- РћРїРµСЂР°С†РёРё РЅР°Рґ РёРјРµРЅР°РјРё РєР°С‚Р°Р»РѕРіРѕРІ/С„Р°Р№Р»РѕРІ ---------------------------------------------------------
 ----------------------------------------------------------------------------------------------------
 
--- |Текущее местопребывание в файл-менеджере: каталог внутри архива или на диске
+-- |РўРµРєСѓС‰РµРµ РјРµСЃС‚РѕРїСЂРµР±С‹РІР°РЅРёРµ РІ С„Р°Р№Р»-РјРµРЅРµРґР¶РµСЂРµ: РєР°С‚Р°Р»РѕРі РІРЅСѓС‚СЂРё Р°СЂС…РёРІР° РёР»Рё РЅР° РґРёСЃРєРµ
 data PathInfo path  =  ArcPath path path | DiskPath path | Not_Exists  deriving (Eq,Show)
 
 isArcPath ArcPath{} = True
 isArcPath _         = False
 
--- |Парсит текущее местопребывание в FM в структуру PathInfo
+-- |РџР°СЂСЃРёС‚ С‚РµРєСѓС‰РµРµ РјРµСЃС‚РѕРїСЂРµР±С‹РІР°РЅРёРµ РІ FM РІ СЃС‚СЂСѓРєС‚СѓСЂСѓ PathInfo
 splitArcPath fm' fullname = do
   fm <- val fm'
-  -- Сравним fullname с именем открытого в fm архива (arcname)
-  -- Если arcname - префикс fullname, то разобьём fullname на имя архива arcname и каталог внутри него
-  let arcname = isFM_Archive fm.$bool "!^%^@!%" (fm_arcname fm)
-  if arcname `isParentDirOf` fullname
+  -- РЎСЂР°РІРЅРёРј fullname СЃ РёРјРµРЅРµРј РѕС‚РєСЂС‹С‚РѕРіРѕ РІ fm Р°СЂС…РёРІР° (arcname)
+  -- Р•СЃР»Рё arcname - РїСЂРµС„РёРєСЃ fullname, С‚Рѕ СЂР°Р·РѕР±СЊС‘Рј fullname РЅР° РёРјСЏ Р°СЂС…РёРІР° arcname Рё РєР°С‚Р°Р»РѕРі РІРЅСѓС‚СЂРё РЅРµРіРѕ
+  let arcname = fm_arcname fm
+  if isFM_Archive fm  &&  (arcname `isParentDirOf` fullname)
     then return$ ArcPath arcname (fullname `dropParentDir` arcname)
     else do
-  -- Проверим существование каталога с таким именем (или "", чтобы избежать зацикливания)
+  -- РџСЂРѕРІРµСЂРёРј СЃСѓС‰РµСЃС‚РІРѕРІР°РЅРёРµ РєР°С‚Р°Р»РѕРіР° СЃ С‚Р°РєРёРј РёРјРµРЅРµРј (РёР»Рё "", С‡С‚РѕР±С‹ РёР·Р±РµР¶Р°С‚СЊ Р·Р°С†РёРєР»РёРІР°РЅРёСЏ)
   d <- not(isURL fullname) &&& dirExist fullname
   if d || fullname=="" then return$ DiskPath fullname
     else do
-  -- Проверим существование файла с таким именем
+  -- РџСЂРѕРІРµСЂРёРј СЃСѓС‰РµСЃС‚РІРѕРІР°РЅРёРµ С„Р°Р№Р»Р° СЃ С‚Р°РєРёРј РёРјРµРЅРµРј
   f <- fileExist fullname
   if f then return$ ArcPath fullname ""
     else do
-  -- Повторим все проверки, отрезав от fullname последнюю компоненту имени
+  -- РџРѕРІС‚РѕСЂРёРј РІСЃРµ РїСЂРѕРІРµСЂРєРё, РѕС‚СЂРµР·Р°РІ РѕС‚ fullname РїРѕСЃР»РµРґРЅСЋСЋ РєРѕРјРїРѕРЅРµРЅС‚Сѓ РёРјРµРЅРё
   res <- splitArcPath fm' (takeDirectory fullname)
-  -- Если результат - каталог внутри архива, то добавим отрезанную компоненту к имени каталога
-  -- Иначе же оригинальный fullname ссылался на несуществующий в природе файл
+  -- Р•СЃР»Рё СЂРµР·СѓР»СЊС‚Р°С‚ - РєР°С‚Р°Р»РѕРі РІРЅСѓС‚СЂРё Р°СЂС…РёРІР°, С‚Рѕ РґРѕР±Р°РІРёРј РѕС‚СЂРµР·Р°РЅРЅСѓСЋ РєРѕРјРїРѕРЅРµРЅС‚Сѓ Рє РёРјРµРЅРё РєР°С‚Р°Р»РѕРіР°
+  -- РРЅР°С‡Рµ Р¶Рµ РѕСЂРёРіРёРЅР°Р»СЊРЅС‹Р№ fullname СЃСЃС‹Р»Р°Р»СЃСЏ РЅР° РЅРµСЃСѓС‰РµСЃС‚РІСѓСЋС‰РёР№ РІ РїСЂРёСЂРѕРґРµ С„Р°Р№Р»
   case res of
-    ArcPath  dir name | isURL(takeDirectory fullname) == isURL fullname  -- Проверяем что мы не обрезали URL по самые гланды :D
+    ArcPath  dir name | isURL(takeDirectory fullname) == isURL fullname  -- РџСЂРѕРІРµСЂСЏРµРј С‡С‚Рѕ РјС‹ РЅРµ РѕР±СЂРµР·Р°Р»Рё URL РїРѕ СЃР°РјС‹Рµ РіР»Р°РЅРґС‹ :D
                       -> return$ ArcPath dir (name </> takeFileName fullname)
     _                 -> return$ Not_Exists
 
 
--- |Перевести путь, записанный относительно текущего дискового каталога в FM, в абсолютный
+-- |РџРµСЂРµРІРµСЃС‚Рё РїСѓС‚СЊ, Р·Р°РїРёСЃР°РЅРЅС‹Р№ РѕС‚РЅРѕСЃРёС‚РµР»СЊРЅРѕ С‚РµРєСѓС‰РµРіРѕ РґРёСЃРєРѕРІРѕРіРѕ РєР°С‚Р°Р»РѕРіР° РІ FM, РІ Р°Р±СЃРѕР»СЋС‚РЅС‹Р№
 fmCanonicalizeDiskPath fm' relname = do
   let name  =  unquote (trimRight relname)
   if (name=="")  then return ""  else do
   fm <- val fm'
   myCanonicalizePath$ fm_curdir fm </> name
 
--- |Перевести путь, записанный относительно текущего положения в FM, в абсолютный
+-- |РџРµСЂРµРІРµСЃС‚Рё РїСѓС‚СЊ, Р·Р°РїРёСЃР°РЅРЅС‹Р№ РѕС‚РЅРѕСЃРёС‚РµР»СЊРЅРѕ С‚РµРєСѓС‰РµРіРѕ РїРѕР»РѕР¶РµРЅРёСЏ РІ FM, РІ Р°Р±СЃРѕР»СЋС‚РЅС‹Р№
 fmCanonicalizePath fm' relname = do
   fm <- val fm'
   case () of
    _ | isURL relname                              ->  return relname
      | isAbsolute relname                         ->  myCanonicalizePath relname
-     | isURL (fm_current fm) || isFM_Archive fm   ->  return$ urlNormalize (fm_current fm) relname    -- Использовать свой Normalize для навигацуи внутри архивов и по URL
+     | isURL (fm_current fm) || isFM_Archive fm   ->  return$ urlNormalize (fm_current fm) relname    -- РСЃРїРѕР»СЊР·РѕРІР°С‚СЊ СЃРІРѕР№ Normalize РґР»СЏ РЅР°РІРёРіР°С†СѓРё РІРЅСѓС‚СЂРё Р°СЂС…РёРІРѕРІ Рё РїРѕ URL
      | otherwise                                  ->  myCanonicalizePath (fm_current fm </> relname)
 
--- |Нормализовать путь, записанный относительно некоего URL
+-- |РќРѕСЂРјР°Р»РёР·РѕРІР°С‚СЊ РїСѓС‚СЊ, Р·Р°РїРёСЃР°РЅРЅС‹Р№ РѕС‚РЅРѕСЃРёС‚РµР»СЊРЅРѕ РЅРµРєРѕРµРіРѕ URL
 urlNormalize url relname =  dropTrailingPathSeparator$ concat$ reverse$ remove$ reverse$ splitPath (url++[pathSeparator]) ++ splitPath relname
   where remove (".":xs)    = remove xs
         remove ("./":xs)    = remove xs
@@ -142,70 +163,105 @@ urlNormalize url relname =  dropTrailingPathSeparator$ concat$ reverse$ remove$ 
 
 
 ----------------------------------------------------------------------------------------------------
----- FileData и FileTree ---------------------------------------------------------------------------
+---- FileData Рё FileTree ---------------------------------------------------------------------------
 ----------------------------------------------------------------------------------------------------
 
--- |Структура, хранящая всю необходимую нам информацию о файле
+-- |РЎС‚СЂСѓРєС‚СѓСЂР°, С…СЂР°РЅСЏС‰Р°СЏ РІСЃСЋ РЅРµРѕР±С…РѕРґРёРјСѓСЋ РЅР°Рј РёРЅС„РѕСЂРјР°С†РёСЋ Рѕ С„Р°Р№Р»Рµ
 data FileData = FileData
-  { fdPackedDirectory       :: !MyPackedString   -- Имя каталога
-  , fdPackedBasename        :: !MyPackedString   -- Имя файла без каталога, но с расширением
-  , fdSize  :: {-# UNPACK #-}  !FileSize         -- Размер файла (0 для каталогов)
-  , fdTime  :: {-# UNPACK #-}  !FileTime         -- Дата/время создания файла
-  , fdIsDir :: {-# UNPACK #-}  !Bool             -- Это каталог?
+  { fdPackedDirectory      :: !MyPackedString  -- РРјСЏ РєР°С‚Р°Р»РѕРіР°
+  , fdPackedBasename       :: !MyPackedString  -- РРјСЏ С„Р°Р№Р»Р° Р±РµР· РєР°С‚Р°Р»РѕРіР°, РЅРѕ СЃ СЂР°СЃС€РёСЂРµРЅРёРµРј
+  , fdSize  :: {-# UNPACK #-} !FileSize        -- Р Р°Р·РјРµСЂ С„Р°Р№Р»Р° (0 РґР»СЏ РєР°С‚Р°Р»РѕРіРѕРІ)
+  , fdTime  :: {-# UNPACK #-} !FileTime        -- Р”Р°С‚Р°/РІСЂРµРјСЏ СЃРѕР·РґР°РЅРёСЏ С„Р°Р№Р»Р°
+  , fdAttr  :: {-# UNPACK #-} !FileAttr        -- Р”РѕСЃРѕРІСЃРєРёРµ Р°С‚СЂРёР±СѓС‚С‹ С„Р°Р№Р»Р°
+  , fdIsDir :: {-# UNPACK #-} !Bool            -- Р­С‚Рѕ РєР°С‚Р°Р»РѕРі?
   }
 
 fiToFileData fi = FileData { fdPackedDirectory = fpPackedDirectory (fiStoredName fi)
                            , fdPackedBasename  = fpPackedBasename  (fiStoredName fi)
                            , fdSize            = fiSize  fi
                            , fdTime            = fiTime  fi
+                           , fdAttr            = fiAttr  fi
                            , fdIsDir           = fiIsDir fi }
 
 fdDirectory  =  myUnpackStr.fdPackedDirectory
 fdBasename   =  myUnpackStr.fdPackedBasename
+fdExt        =  takeExtension.fdBasename
 
--- |Виртуальное поле: полное имя файла, включая каталог и расширение
-fdFullname fd  =  fdDirectory fd </> fdBasename fd
-
--- |Имя файла. Должно быть fdFullname для поддержки режима "плоского вывода" архивов/деревьев файлов
+-- |РРјСЏ С„Р°Р№Р»Р°. Р”РѕР»Р¶РЅРѕ Р±С‹С‚СЊ fdFullname РґР»СЏ РїРѕРґРґРµСЂР¶РєРё СЂРµР¶РёРјР° "РїР»РѕСЃРєРѕРіРѕ РІС‹РІРѕРґР°" Р°СЂС…РёРІРѕРІ/РґРµСЂРµРІСЊРµРІ С„Р°Р№Р»РѕРІ
 fmname = fdBasename
 
--- |Возвращает искусственный каталог с базовым именем name
+-- |Р’РёСЂС‚СѓР°Р»СЊРЅРѕРµ РїРѕР»Рµ: РїРѕР»РЅРѕРµ РёРјСЏ С„Р°Р№Р»Р°, РІРєР»СЋС‡Р°СЏ РєР°С‚Р°Р»РѕРі Рё СЂР°СЃС€РёСЂРµРЅРёРµ
+fdFullname fd  =  fdDirectory fd </> fdBasename fd
+
+-- |Р’РѕР·РІСЂР°С‰Р°РµС‚ РёСЃРєСѓСЃСЃС‚РІРµРЅРЅС‹Р№ РєР°С‚Р°Р»РѕРі СЃ Р±Р°Р·РѕРІС‹Рј РёРјРµРЅРµРј name
 fdArtificialDir name = FileData { fdPackedDirectory = myPackStr ""
                                 , fdPackedBasename  = name
                                 , fdSize            = 0
-                                , fdTime            = aMINIMAL_POSSIBLE_DATETIME
+                                , fdTime            = aMINIMUM_POSSIBLE_FILETIME
+                                , fdAttr            = 0
                                 , fdIsDir           = True }
 
 
 
--- |Дерево файлов. Включает список файлов на этом уровне плюс поименованные поддеревья
+-- |РўРёРї С„Р°Р№Р»Р°. Р‘РµСЂС‘С‚СЃСЏ РёР· С…РµС€Р°, РµСЃР»Рё РІ РЅС‘Рј РЅРµС‚ - Р·Р°РїСЂР°С€РёРІР°РµС‚СЃСЏ Сѓ Windows
+fdType fd | fdIsDir fd = ""
+          | otherwise  = unsafePerformIO$ do
+                           let ext = fdExt fd ||| "file"
+                           types <- val filetypeList
+                           case ext `lookup` types of
+                             Just typ -> return typ
+                             Nothing  -> do typ <- guiGetFileType ext
+                                            filetypeList =: (ext,typ):types
+                                            return typ
+
+-- |Р“Р»РѕР±Р°Р»СЊРЅР°СЏ РїРµСЂРµРјРµРЅРЅР°СЏ, С…СЂР°РЅСЏС‰Р°СЏ СѓР¶Рµ РІС‹СЏРІР»РµРЅРЅС‹Рµ СЃРѕРѕС‚РІРµС‚СЃС‚РІРёСЏ СЂР°СЃС€РёСЂРµРЅРёРµ -> С‚РёРї С„Р°Р№Р»Р°
+filetypeList = unsafePerformIO$ mvar [] :: MVar [(String,String)]
+
+-- |РџРѕР»СѓС‡РёС‚СЊ С‚РёРї С„Р°Р№Р»Р° РїРѕ РµРіРѕ СЂР°СЃС€РёСЂРµРЅРёСЋ
+guiGetFileType ext = do
+  withCWString ext  $ \c_ext -> do
+  allocaBytes 1000 $ \buf -> do
+  c_GuiGetFileType c_ext buf
+  peekCWString buf
+
+foreign import ccall safe "Environment.h GuiGetFileType"
+  c_GuiGetFileType :: CWString -> CWString -> IO ()
+
+
+
+
+-- |Р”РµСЂРµРІРѕ С„Р°Р№Р»РѕРІ. Р’РєР»СЋС‡Р°РµС‚ СЃРїРёСЃРѕРє С„Р°Р№Р»РѕРІ РЅР° СЌС‚РѕРј СѓСЂРѕРІРЅРµ РїР»СЋСЃ РїРѕРёРјРµРЅРѕРІР°РЅРЅС‹Рµ РїРѕРґРґРµСЂРµРІСЊСЏ
 --                        files   dirname subtree
 data FileTree a = FileTree [a]  [(MyPackedString, FileTree a)]
 
--- |Возвращает количество каталогов в дереве
+-- |Р’РѕР·РІСЂР°С‰Р°РµС‚ РєРѕР»РёС‡РµСЃС‚РІРѕ РєР°С‚Р°Р»РѕРіРѕРІ РІ РґРµСЂРµРІРµ
 ftDirs  (FileTree files subdirs) = length (removeDups (subdirs.$map fst  ++  files.$filter fdIsDir .$map fdPackedBasename))
                                  + sum (map (ftDirs.snd) subdirs)
 
--- |Возвращает количество файлов в дереве
+-- |Р’РѕР·РІСЂР°С‰Р°РµС‚ РєРѕР»РёС‡РµСЃС‚РІРѕ С„Р°Р№Р»РѕРІ РІ РґРµСЂРµРІРµ
 ftFiles (FileTree files subdirs) = length (filter (not.fdIsDir) files)  +  sum (map (ftFiles.snd) subdirs)
 
--- |Возврашает список файлов в заданном каталоге,
--- используя отображение artificial для генерации псевдо-файлов из имён вложенных каталогов
+-- |Р’РѕР·РІСЂР°С€Р°РµС‚ СЃРїРёСЃРѕРє С„Р°Р№Р»РѕРІ РІ Р·Р°РґР°РЅРЅРѕРј РєР°С‚Р°Р»РѕРіРµ,
+-- РёСЃРїРѕР»СЊР·СѓСЏ РѕС‚РѕР±СЂР°Р¶РµРЅРёРµ artificial РґР»СЏ РіРµРЅРµСЂР°С†РёРё РїСЃРµРІРґРѕ-С„Р°Р№Р»РѕРІ РёР· РёРјС‘РЅ РІР»РѕР¶РµРЅРЅС‹С… РєР°С‚Р°Р»РѕРіРѕРІ
 ftFilesIn dir artificial = f (map myPackStr$ splitDirectories dir)
  where
   f (path0:path_rest) (FileTree _     subdirs) = lookup path0 subdirs.$ maybe [] (f path_rest)
   f []                (FileTree files subdirs) = (files++map (artificial.fst) subdirs)
                                                   .$ keepOnlyFirstOn fdPackedBasename
 
--- |Превращает список файлов в дерево
+-- |РќР°Р№С‚Рё РёРЅС„РѕСЂРјР°С†РёСЋ Рѕ С„Р°Р№Р»Рµ РїРѕ РµРіРѕ РїРѕР»РЅРѕРјСѓ РїСѓС‚Рё РІ РґРµСЂРµРІРµ
+ftFind fullpath tree = let (dir,name) = splitFileName fullpath
+                           files = ftFilesIn (dropTrailingPathSeparator dir) fdArtificialDir tree
+                       in  listToMaybe$ filter ((name==).fdBasename) files
+
+-- |РџСЂРµРІСЂР°С‰Р°РµС‚ СЃРїРёСЃРѕРє С„Р°Р№Р»РѕРІ РІ РґРµСЂРµРІРѕ
 buildTree x = x
-  .$splitt 0                                     -- Разбиваем на группы по каталогам, начиная с 0-го уровня
+  .$splitt 0                                     -- Р Р°Р·Р±РёРІР°РµРј РЅР° РіСЂСѓРїРїС‹ РїРѕ РєР°С‚Р°Р»РѕРіР°Рј, РЅР°С‡РёРЅР°СЏ СЃ 0-РіРѕ СѓСЂРѕРІРЅСЏ
 splitt n x = x
-  .$sort_and_groupOn (dirPart n)                 -- Сортируем/группируем по имени каталога очередного уровня
-  .$partition ((==myPackStr"").dirPart n.head)   -- Отделяем группу с файлами, находящимися непосредственно в этом каталоге
-  .$(\(root,other) -> FileTree (concat root)     -- Остальные группы обрабатываем рекурсивно на (n+1)-м уровне
+  .$sort_and_groupOn (dirPart n)                 -- РЎРѕСЂС‚РёСЂСѓРµРј/РіСЂСѓРїРїРёСЂСѓРµРј РїРѕ РёРјРµРЅРё РєР°С‚Р°Р»РѕРіР° РѕС‡РµСЂРµРґРЅРѕРіРѕ СѓСЂРѕРІРЅСЏ
+  .$partition ((==myPackStr"").dirPart n.head)   -- РћС‚РґРµР»СЏРµРј РіСЂСѓРїРїСѓ СЃ С„Р°Р№Р»Р°РјРё, РЅР°С…РѕРґСЏС‰РёРјРёСЃСЏ РЅРµРїРѕСЃСЂРµРґСЃС‚РІРµРЅРЅРѕ РІ СЌС‚РѕРј РєР°С‚Р°Р»РѕРіРµ
+  .$(\(root,other) -> FileTree (concat root)     -- РћСЃС‚Р°Р»СЊРЅС‹Рµ РіСЂСѓРїРїС‹ РѕР±СЂР°Р±Р°С‚С‹РІР°РµРј СЂРµРєСѓСЂСЃРёРІРЅРѕ РЅР° (n+1)-Рј СѓСЂРѕРІРЅРµ
                                (map2s (dirPart n.head, splitt (n+1)) other))
 
--- Имя n-й части каталога
+-- РРјСЏ n-Р№ С‡Р°СЃС‚Рё РєР°С‚Р°Р»РѕРіР°
 dirPart n = myPackStr.(!!n).(++[""]).splitDirectories.fdDirectory
-

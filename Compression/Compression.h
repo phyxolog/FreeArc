@@ -15,59 +15,52 @@
 extern "C" {
 #endif
 
-//Коды ошибок
-#define FREEARC_OK                               0     /* ALL RIGHT */
-#define FREEARC_ERRCODE_GENERAL                  (-1)  /* Some error when (de)compressing */
-#define FREEARC_ERRCODE_INVALID_COMPRESSOR       (-2)  /* Invalid compression method or parameters */
-#define FREEARC_ERRCODE_ONLY_DECOMPRESS          (-3)  /* Program builded with FREEARC_DECOMPRESS_ONLY, so don't try to use compress */
-#define FREEARC_ERRCODE_OUTBLOCK_TOO_SMALL       (-4)  /* Output block size in (de)compressMem is not enough for all output data */
-#define FREEARC_ERRCODE_NOT_ENOUGH_MEMORY        (-5)  /* Can't allocate memory needed for (de)compression */
-#define FREEARC_ERRCODE_READ                     (-6)  /* Error when reading data */
-#define FREEARC_ERRCODE_BAD_COMPRESSED_DATA      (-7)  /* Data can't be decompressed */
-#define FREEARC_ERRCODE_NOT_IMPLEMENTED          (-8)  /* Requested feature isn't supported */
-#define FREEARC_ERRCODE_NO_MORE_DATA_REQUIRED    (-9)  /* Required part of data was already decompressed */
-#define FREEARC_ERRCODE_OPERATION_TERMINATED    (-10)  /* Operation terminated by user */
-#define FREEARC_ERRCODE_WRITE                   (-11)  /* Error when writing data */
+// Signature of files made by my utilities
+#define BULAT_ZIGANSHIN_SIGNATURE 0x26351817
 
-
-// Константы для удобной записи объёмов памяти
+// РљРѕРЅСЃС‚Р°РЅС‚С‹ РґР»СЏ СѓРґРѕР±РЅРѕР№ Р·Р°РїРёСЃРё РѕР±СЉС‘РјРѕРІ РїР°РјСЏС‚Рё
 #define b_ (1u)
 #define kb (1024*b_)
 #define mb (1024*kb)
 #define gb (1024*mb)
+#define terabyte (1024*uint64(gb))
 
-// Количество байт, которые должны читаться/записываться за один раз во всех упаковщиках
-#define BUFFER_SIZE (64*kb)
+// РљРѕР»РёС‡РµСЃС‚РІРѕ Р±Р°Р№С‚, РєРѕС‚РѕСЂС‹Рµ РґРѕР»Р¶РЅС‹ С‡РёС‚Р°С‚СЊСЃСЏ/Р·Р°РїРёСЃС‹РІР°С‚СЊСЃСЏ Р·Р° РѕРґРёРЅ СЂР°Р· РІРѕ РІСЃРµС… СѓРїР°РєРѕРІС‰РёРєР°С…
+#define BUFFER_SIZE (256*kb)
 
-// Количество байт, которые должны читаться/записываться за один раз в быстрых методах и при распаковке асимметричных алгоритмов
+// РљРѕР»РёС‡РµСЃС‚РІРѕ Р±Р°Р№С‚, РєРѕС‚РѕСЂС‹Рµ РґРѕР»Р¶РЅС‹ С‡РёС‚Р°С‚СЊСЃСЏ/Р·Р°РїРёСЃС‹РІР°С‚СЊСЃСЏ Р·Р° РѕРґРёРЅ СЂР°Р· РІ Р±С‹СЃС‚СЂС‹С… РјРµС‚РѕРґР°С… Рё РїСЂРё СЂР°СЃРїР°РєРѕРІРєРµ Р°СЃРёРјРјРµС‚СЂРёС‡РЅС‹С… Р°Р»РіРѕСЂРёС‚РјРѕРІ
 #define LARGE_BUFFER_SIZE (256*kb)
 
-// Количество байт, которые должны читаться/записываться за один раз в очень быстрых методах (storing, tornado и тому подобное)
-// Этот объём минимизирует потери на disk seek operations - при условии, что одновременно не происходит в/в в другом потоке ;)
+// РљРѕР»РёС‡РµСЃС‚РІРѕ Р±Р°Р№С‚, РєРѕС‚РѕСЂС‹Рµ РґРѕР»Р¶РЅС‹ С‡РёС‚Р°С‚СЊСЃСЏ/Р·Р°РїРёСЃС‹РІР°С‚СЊСЃСЏ Р·Р° РѕРґРёРЅ СЂР°Р· РІ РѕС‡РµРЅСЊ Р±С‹СЃС‚СЂС‹С… РјРµС‚РѕРґР°С… (storing, tornado Рё С‚РѕРјСѓ РїРѕРґРѕР±РЅРѕРµ)
+// Р­С‚РѕС‚ РѕР±СЉС‘Рј РјРёРЅРёРјРёР·РёСЂСѓРµС‚ РїРѕС‚РµСЂРё РЅР° disk seek operations - РїСЂРё СѓСЃР»РѕРІРёРё, С‡С‚Рѕ РѕРґРЅРѕРІСЂРµРјРµРЅРЅРѕ РЅРµ РїСЂРѕРёСЃС…РѕРґРёС‚ РІ/РІ РІ РґСЂСѓРіРѕРј РїРѕС‚РѕРєРµ ;)
 #define HUGE_BUFFER_SIZE (8*mb)
 
-// Дополнительные определения для удобства создания парсеров строк методов сжатия
-#define COMPRESSION_METHODS_DELIMITER            '+'   /* Разделитель алгоритмов сжатия в строковом описании компрессора */
-#define COMPRESSION_METHOD_PARAMETERS_DELIMITER  ':'   /* Разделитель параметров в строковом описании метода сжатия */
-#define MAX_COMPRESSION_METHODS    1000        /* Должно быть не меньше числа методов сжатия, регистрируемых с помощью AddCompressionMethod */
-#define MAX_PARAMETERS             200         /* Должно быть не меньше максимального кол-ва параметров (разделённых двоеточиями), которое может иметь метод сжатия */
-#define MAX_METHOD_STRLEN          2048        /* Максимальная длина строки, описывающей метод сжатия */
-#define MAX_METHODS_IN_COMPRESSOR  100         /* Максимальное число методов в одном компрессоре */
-#define MAX_EXTERNAL_COMPRESSOR_SECTION_LENGTH 2048  /* Максимальная длина секции [External compressor] */
+// C РєР°РєРѕР№ С‡Р°СЃС‚РѕС‚РѕР№ РЅР°РґРѕ СЃРѕРѕР±С‰Р°С‚СЊ Рѕ РїСЂРѕРіСЂРµСЃСЃРµ РІ СѓРїР°РєРѕРІРєРµ/СЂР°СЃРїР°РєРѕРІРєРµ
+#define PROGRESS_CHUNK_SIZE (64*kb)
+
+// Р”РѕРїРѕР»РЅРёС‚РµР»СЊРЅС‹Рµ РѕРїСЂРµРґРµР»РµРЅРёСЏ РґР»СЏ СѓРґРѕР±СЃС‚РІР° СЃРѕР·РґР°РЅРёСЏ РїР°СЂСЃРµСЂРѕРІ СЃС‚СЂРѕРє РјРµС‚РѕРґРѕРІ СЃР¶Р°С‚РёСЏ
+#define COMPRESSION_METHODS_DELIMITER            '+'   /* Р Р°Р·РґРµР»РёС‚РµР»СЊ РјРµС‚РѕРґРѕРІ СЃР¶Р°С‚РёСЏ РІ СЃС‚СЂРѕРєРѕРІРѕРј РѕРїРёСЃР°РЅРёРё РєРѕРјРїСЂРµСЃСЃРѕСЂР° */
+#define COMPRESSION_METHOD_PARAMETERS_DELIMITER  ':'   /* Р Р°Р·РґРµР»РёС‚РµР»СЊ РїР°СЂР°РјРµС‚СЂРѕРІ РІ СЃС‚СЂРѕРєРѕРІРѕРј РѕРїРёСЃР°РЅРёРё РјРµС‚РѕРґР° СЃР¶Р°С‚РёСЏ */
+#define MAX_COMPRESSION_METHODS    1000        /* Р”РѕР»Р¶РЅРѕ Р±С‹С‚СЊ РЅРµ РјРµРЅСЊС€Рµ С‡РёСЃР»Р° РјРµС‚РѕРґРѕРІ СЃР¶Р°С‚РёСЏ, СЂРµРіРёСЃС‚СЂРёСЂСѓРµРјС‹С… СЃ РїРѕРјРѕС‰СЊСЋ AddCompressionMethod */
+#define MAX_PARAMETERS             200         /* Р”РѕР»Р¶РЅРѕ Р±С‹С‚СЊ РЅРµ РјРµРЅСЊС€Рµ РјР°РєСЃРёРјР°Р»СЊРЅРѕРіРѕ РєРѕР»-РІР° РїР°СЂР°РјРµС‚СЂРѕРІ (СЂР°Р·РґРµР»С‘РЅРЅС‹С… РґРІРѕРµС‚РѕС‡РёСЏРјРё), РєРѕС‚РѕСЂРѕРµ РјРѕР¶РµС‚ РёРјРµС‚СЊ РјРµС‚РѕРґ СЃР¶Р°С‚РёСЏ */
+#define MAX_COMPRESSOR_STRLEN      2048        /* РњР°РєСЃРёРјР°Р»СЊРЅР°СЏ РґР»РёРЅР° СЃС‚СЂРѕРєРё, РѕРїРёСЃС‹РІР°СЋС‰РµР№ РєРѕРјРїСЂРµСЃСЃРѕСЂ */
+#define MAX_METHOD_STRLEN          512         /* РњР°РєСЃРёРјР°Р»СЊРЅР°СЏ РґР»РёРЅР° СЃС‚СЂРѕРєРё, РѕРїРёСЃС‹РІР°СЋС‰РµР№ РјРµС‚РѕРґ СЃР¶Р°С‚РёСЏ */
+#define MAX_METHODS_IN_COMPRESSOR  100         /* РњР°РєСЃРёРјР°Р»СЊРЅРѕРµ С‡РёСЃР»Рѕ РјРµС‚РѕРґРѕРІ РІ РѕРґРЅРѕРј РєРѕРјРїСЂРµСЃСЃРѕСЂРµ */
+#define MAX_EXTERNAL_COMPRESSOR_SECTION_LENGTH 2048  /* РњР°РєСЃРёРјР°Р»СЊРЅР°СЏ РґР»РёРЅР° СЃРµРєС†РёРё [External compressor] */
 
 
 // ****************************************************************************************************************************
-// ХЕЛПЕРЫ ЧТЕНИЯ/ЗАПИСИ ДАННЫХ В МЕТОДАХ СЖАТИЯ ******************************************************************************
+// РҐР•Р›РџР•Р Р« Р§РўР•РќРРЇ/Р—РђРџРРЎР Р”РђРќРќР«РҐ Р’ РњР•РўРћР”РђРҐ РЎР–РђРўРРЇ ******************************************************************************
 // ****************************************************************************************************************************
 
-// Тип функции для обратных вызовов
+// РўРёРї С„СѓРЅРєС†РёРё РґР»СЏ РѕР±СЂР°С‚РЅС‹С… РІС‹Р·РѕРІРѕРІ
 typedef int CALLBACK_FUNC (const char *what, void *data, int size, void *auxdata);
 
-// Макросы для чтения/записи в(ы)ходных потоков с проверкой, что передано ровно столько данных, сколько было запрошено
-#define checked_read(ptr,size)         if ((x = callback("read" ,ptr,size,auxdata)) != size) {x>=0 && (x=FREEARC_ERRCODE_READ);  goto finished;}
-#define checked_write(ptr,size)        if ((x = callback("write",ptr,size,auxdata)) != size) {x>=0 && (x=FREEARC_ERRCODE_WRITE); goto finished;}
-// Макрос для чтения входных потоков с проверкой на ошибки и конец входных данных
-#define checked_eof_read(ptr,size)     if ((x = callback("read", ptr,size,auxdata)) != size) {x>0  && (x=FREEARC_ERRCODE_READ);  goto finished;}
+// РњР°РєСЂРѕСЃС‹ РґР»СЏ С‡С‚РµРЅРёСЏ/Р·Р°РїРёСЃРё РІ(С‹)С…РѕРґРЅС‹С… РїРѕС‚РѕРєРѕРІ СЃ РїСЂРѕРІРµСЂРєРѕР№, С‡С‚Рѕ РїРµСЂРµРґР°РЅРѕ СЂРѕРІРЅРѕ СЃС‚РѕР»СЊРєРѕ РґР°РЅРЅС‹С…, СЃРєРѕР»СЊРєРѕ Р±С‹Р»Рѕ Р·Р°РїСЂРѕС€РµРЅРѕ
+#define checked_read(ptr,size)         {if ((x = callback("read" ,ptr,size,auxdata)) != size) {x>=0 && (x=FREEARC_ERRCODE_READ);  goto finished;}}
+#define checked_write(ptr,size)        {if ((x = callback("write",ptr,size,auxdata)) != size) {x>=0 && (x=FREEARC_ERRCODE_WRITE); goto finished;}}
+// РњР°РєСЂРѕСЃ РґР»СЏ С‡С‚РµРЅРёСЏ РІС…РѕРґРЅС‹С… РїРѕС‚РѕРєРѕРІ СЃ РїСЂРѕРІРµСЂРєРѕР№ РЅР° РѕС€РёР±РєРё Рё РєРѕРЅРµС† РІС…РѕРґРЅС‹С… РґР°РЅРЅС‹С…
+#define checked_eof_read(ptr,size)     {if ((x = callback("read", ptr,size,auxdata)) != size) {x>0  && (x=FREEARC_ERRCODE_READ);  goto finished;}}
 
 // Auxiliary code to read/write data blocks and 4-byte headers
 #define INIT() callback ("init", NULL, 0, auxdata)
@@ -95,22 +88,27 @@ typedef int CALLBACK_FUNC (const char *what, void *data, int size, void *auxdata
 {                                                                          \
     void *localBuf = (buf);                                                \
     int localSize  = (size);                                               \
-    if (localSize  &&  (errcode=callback("read",localBuf,localSize,auxdata)) != localSize) { \
-        if (errcode>=0) errcode=FREEARC_ERRCODE_READ;                      \
+    int localErrCode;                                                                                \
+    if (localSize  &&  (localErrCode=callback("read",localBuf,localSize,auxdata)) != localSize) {    \
+        errcode = localErrCode<0? localErrCode : FREEARC_ERRCODE_READ;                               \
         goto finished;                                                     \
     }                                                                      \
 }
 
 #define READ_LEN(len, buf, size)                                           \
 {                                                                          \
-    if ((errcode=(len)=callback("read",buf,size,auxdata)) < 0) {           \
+    int localErrCode;                                                      \
+    if ((localErrCode=(len)=callback("read",buf,size,auxdata)) < 0) {      \
+        errcode = localErrCode;                                            \
         goto finished;                                                     \
     }                                                                      \
 }
 
 #define READ_LEN_OR_EOF(len, buf, size)                                    \
 {                                                                          \
-    if ((errcode=(len)=callback("read",buf,size,auxdata)) <= 0) {          \
+    int localErrCode;                                                      \
+    if ((localErrCode=(len)=callback("read",buf,size,auxdata)) <= 0) {     \
+        errcode = localErrCode;                                            \
         goto finished;                                                     \
     }                                                                      \
 }
@@ -119,9 +117,12 @@ typedef int CALLBACK_FUNC (const char *what, void *data, int size, void *auxdata
 {                                                                          \
     void *localBuf = (buf);                                                \
     int localSize  = (size);                                               \
+    int localErrCode;                                                                   \
     /* "write" callback on success guarantees to write all the data and may return 0 */ \
-    if (localSize && (errcode=callback("write",localBuf,localSize,auxdata))<0)  \
+    if (localSize && (localErrCode=callback("write",localBuf,localSize,auxdata))<0) {   \
+        errcode = localErrCode;                                                         \
         goto finished;                                                     \
+    }                                                                      \
 }
 
 #define READ4(var)                                                         \
@@ -150,12 +151,18 @@ typedef int CALLBACK_FUNC (const char *what, void *data, int size, void *auxdata
 #define QUASIWRITE(size)                                                   \
 {                                                                          \
     int64 localSize = (size);                                              \
-    callback ("quasiwrite", &localSize, size, auxdata);                    \
+    callback ("quasiwrite", &localSize, (size), auxdata);                  \
 }
 
-#define ReturnErrorCode(x)                                                 \
+#define PROGRESS(insize,outsize)                                           \
 {                                                                          \
-    errcode = (x);                                                         \
+    int64 localSize[2] = {(insize),(outsize)};                             \
+    callback ("progress", localSize, 0, auxdata);                          \
+}
+
+#define ReturnErrorCode(err)                                               \
+{                                                                          \
+    errcode = (err);                                                       \
     goto finished;                                                         \
 }                                                                          \
 
@@ -179,193 +186,400 @@ typedef int CALLBACK_FUNC (const char *what, void *data, int size, void *auxdata
         fbuffer.put ((byte*)flocalBuf+rem, flocalSize-rem);                \
     }                                                                      \
 }
+#define FWRITESZ(value)                                                    \
+{                                                                          \
+    const char *flocalValue = (value);                                     \
+    int flocalBytes = strlen(flocalValue) + 1;                             \
+    FWRITE ((void*)flocalValue, flocalBytes);                              \
+}
+#define FWRITE4(value)                                                     \
+{                                                                          \
+    unsigned char flocalHeader[4];                                         \
+    setvalue32 (flocalHeader, value);                                      \
+    FWRITE (flocalHeader, 4);                                              \
+}
+#define FWRITE1(value)                                                     \
+{                                                                          \
+    unsigned char flocalHeader = (value);                                  \
+    FWRITE (&flocalHeader, 1);                                             \
+}
 #define FFLUSH()  { WRITE (fbuffer.buf, fbuffer.len());  fbuffer.empty(); }
-#define FCLOSE()  { FFLUSH();  fbuffer.free(); }
+#define FCLOSE()  { FFLUSH(); }
+
+
+// Р‘СѓС„РµСЂ, РёСЃРїРѕР»СЊР·СѓРµРјС‹Р№ РґР»СЏ РѕСЂРіР°РЅРёР·Р°С†РёРё РЅРµСЃРєРѕР»СЊРєРёС… РЅРµР·Р°РІРёСЃРёРјС‹С… РїРѕС‚РѕРєРѕРІ Р·Р°РїРёСЃРё
+// РІ РїСЂРѕРіСЂР°РјРјРµ. Р‘СѓС„РµСЂ СѓРјРµРµС‚ Р·Р°РїРёСЃС‹РІР°С‚СЊ РІ СЃРµР±СЏ 8/16/32-СЂР°Р·СЂСЏРґРЅС‹Рµ С‡РёСЃР»Р° Рё СЂР°СЃС€РёСЂСЏС‚СЊСЃСЏ
+// РїСЂРё РЅРµРѕР±С…РѕРґРёРјРѕСЃС‚Рё. РџРѕР·РґРЅРµРµ СЃРѕРґРµСЂР¶РёРјРѕРµ Р±СѓС„РµСЂР° СЃР±СЂР°СЃС‹РІР°РµС‚СЃСЏ РІ РІС‹С…РѕРґРЅРѕР№ РїРѕС‚РѕРє.
+// Р”РѕРїРѕР»РЅРёС‚РµР»СЊРЅРѕ Р±СѓС„РµСЂ РїРѕРґРґРµСЂР¶РёРІР°РµС‚ С‡С‚РµРЅРёРµ СЂР°РЅРµРµ Р·Р°РїРёСЃР°РЅРЅС‹С… РІ РЅРµРіРѕ РґР°РЅРЅС‹С….
+// РљРѕРЅРµС† Р·Р°РїРёСЃР°РЅРЅРѕР№ С‡Р°СЃС‚Рё Р±СѓС„РµСЂР° - СЌС‚Рѕ max(p,end), РіРґРµ p - С‚РµРєСѓС‰РёР№ СѓРєР°Р·Р°С‚РµР»СЊ,
+// Р° end - РјР°РєСЃРёРјР°Р»СЊРЅР°СЏ РїРѕР·РёС†РёСЏ СЂР°РЅРµРµ Р·Р°РїРёСЃР°РЅРЅС‹С… РґР°РЅРЅС‹С….
+struct Buffer
+{
+    byte*  buf;              // Р°РґСЂРµСЃ РІС‹РґРµР»РµРЅРЅРѕРіРѕ Р±СѓС„РµСЂР°
+    byte*  p;                // С‚РµРєСѓС‰РёР№ СѓРєР°Р·Р°С‚РµР»СЊ С‡С‚РµРЅРёСЏ/Р·Р°РїРёСЃРё РІРЅСѓС‚СЂРё СЌС‚РѕРіРѕ Р±СѓС„РµСЂР°
+    byte*  end;              // Р°РґСЂРµСЃ РїРѕСЃР»Рµ РєРѕРЅС†Р° РїСЂРѕС‡РёС‚Р°РЅРЅС‹С…/Р·Р°РїРёСЃР°РЅРЅС‹С… РґР°РЅРЅС‹С…
+    byte*  bufend;           // РєРѕРЅРµС† СЃР°РјРѕРіРѕ Р±СѓС„РµСЂР°
+
+    Buffer (uint size=64*kb) { buf=p=end= (byte*) malloc(size);  bufend=buf+size; }
+    ~Buffer()                { freebuf(); }
+    void   freebuf()         { free(buf);  buf=p=end=NULL; }
+    void   empty()           { p=end=buf; }
+    int    len()             { return mymax(p,end)-buf; }
+
+    void   put8 (uint x)     { reserve(sizeof(uint8 ));  *(uint8 *)p=x;    p+=sizeof(uint8 ); }
+    void   put16(uint x)     { reserve(sizeof(uint16));  setvalue16(p,x);  p+=sizeof(uint16); }
+    void   put32(uint x)     { reserve(sizeof(uint32));  setvalue32(p,x);  p+=sizeof(uint32); }
+
+    void   put(void *b, int n)  { reserve(n);  memcpy(p,b,n);  p+=n; }
+    void   puts (char *s)    { put (s, strlen(s)); }
+    void   putsz(char *s)    { put (s, strlen(s)+1); }
+
+    int    remainingSpace()  { return bufend-p; }
+    void   reserve(uint n)   {
+                               if (remainingSpace() < n)
+                               {
+                                 uint newsize = mymax(p+n-buf, (bufend-buf)*2);
+                                 byte* newbuf = (byte*) realloc (buf, newsize);
+                                 bufend = newbuf + newsize;
+                                 p   += newbuf-buf;
+                                 end += newbuf-buf;
+                                 buf  = newbuf;
+                               }
+                             }
+
+    void reverseBytes()      {
+                               byte *lo = buf,  *hi = buf + len() - 1,  swap;
+                               while (lo < hi)  { swap = *lo;  *lo++ = *hi;  *hi-- = swap; }
+                             }
+// Р”Р»СЏ С‡С‚РµРЅРёСЏ РґР°РЅРЅС‹С…
+    void   rewind()          { end=mymax(p,end);  p=buf; }
+    uint   get8 ()           { uint x = *(uint8 *)p;  p+=sizeof(uint8 );  return x; }
+    uint   get16()           { uint x = value16(p);   p+=sizeof(uint16);  return x; }
+    uint   get32()           { uint x = value32(p);   p+=sizeof(uint32);  return x; }
+    int    get(void *b, int n)  { n = mymin(remainingData(), n);  memcpy(b,p,n);  p+=n;  return n;}
+    int    remainingData()   { return p<end? end-p : 0; }
+    bool   eof()             { return remainingData()==0; }
+};
+
 #endif // !FREEARC_STANDALONE_TORNADO
 
 
 // ****************************************************************************************************************************
-// УТИЛИТЫ ********************************************************************************************************************
+// Р’Р«Р§РРЎР›Р•РќРР• CRC-32                                                                                                          *
 // ****************************************************************************************************************************
 
-// Алгоритм сжатия/шифрования, представленный в виде строки
+#define INIT_CRC 0xffffffff
+
+uint32 UpdateCRC (const void *Addr, size_t Size, uint32 StartCRC);     // РћР±РЅРѕРІРёС‚СЊ CRC СЃРѕРґРµСЂР¶РёРјС‹Рј Р±Р»РѕРєР° РґР°РЅРЅС‹С…
+uint32 CalcCRC   (const void *Addr, size_t Size);                      // Р’С‹С‡РёСЃР»РёС‚СЊ CRC Р±Р»РѕРєР° РґР°РЅРЅС‹С…
+
+
+// ****************************************************************************************************************************
+// РЈРўРР›РРўР« ********************************************************************************************************************
+// ****************************************************************************************************************************
+
+// РџР°СЂР°РјРµС‚СЂ Р°Р»РіРѕСЂРёС‚РјР° СЃР¶Р°С‚РёСЏ/С€РёС„СЂРѕРІР°РЅРёСЏ
+typedef char *CPARAM;
+
+// РђР»РіРѕСЂРёС‚Рј СЃР¶Р°С‚РёСЏ/С€РёС„СЂРѕРІР°РЅРёСЏ, РїСЂРµРґСЃС‚Р°РІР»РµРЅРЅС‹Р№ РІ РІРёРґРµ СЃС‚СЂРѕРєРё
 typedef char *CMETHOD;
 
-// Последовательность алгоритмов сжатия/шифрования, представленная в виде "exe+rep+lzma+aes"
+// РџРѕСЃР»РµРґРѕРІР°С‚РµР»СЊРЅРѕСЃС‚СЊ Р°Р»РіРѕСЂРёС‚РјРѕРІ СЃР¶Р°С‚РёСЏ/С€РёС„СЂРѕРІР°РЅРёСЏ, РїСЂРµРґСЃС‚Р°РІР»РµРЅРЅР°СЏ РІ РІРёРґРµ "exe+rep+lzma+aes"
 typedef char *COMPRESSOR;
 
-// Запросить сервис what метода сжатия method
+// Р—Р°РїСЂРѕСЃРёС‚СЊ СЃРµСЂРІРёСЃ what РјРµС‚РѕРґР° СЃР¶Р°С‚РёСЏ method
 int CompressionService (char *method, char *what, DEFAULT(int param,0), DEFAULT(void *data,NULL), DEFAULT(CALLBACK_FUNC *callback,NULL));
 
-// Проверить, что данный компрессор включает алгоритм шифрования
+// РџСЂРѕРІРµСЂРёС‚СЊ, С‡С‚Рѕ РґР°РЅРЅС‹Р№ РєРѕРјРїСЂРµСЃСЃРѕСЂ РІРєР»СЋС‡Р°РµС‚ Р°Р»РіРѕСЂРёС‚Рј С€РёС„СЂРѕРІР°РЅРёСЏ
 int compressorIsEncrypted (COMPRESSOR c);
-// Вычислить, сколько памяти нужно для распаковки данных, сжатых этим компрессором
+// Р’С‹С‡РёСЃР»РёС‚СЊ, СЃРєРѕР»СЊРєРѕ РїР°РјСЏС‚Рё РЅСѓР¶РЅРѕ РґР»СЏ СЂР°СЃРїР°РєРѕРІРєРё РґР°РЅРЅС‹С…, СЃР¶Р°С‚С‹С… СЌС‚РёРј РєРѕРјРїСЂРµСЃСЃРѕСЂРѕРј
 MemSize compressorGetDecompressionMem (COMPRESSOR c);
 
 // Get/set number of threads used for (de)compression
 int  __cdecl GetCompressionThreads (void);
 void __cdecl SetCompressionThreads (int threads);
 
-// Load (accelerated) function from facompress.dll
-FARPROC LoadFromDLL (char *funcname);
-
 // Used in 4x4 only: read entire input buffer before compression begins, allocate output buffer large enough to hold entire compressed output
 extern int compress_all_at_once;
+void __cdecl Set_compress_all_at_once (int n);
+struct Set_compress_all_at_once_Until_end_of_block
+{
+  int save;
+  Set_compress_all_at_once_Until_end_of_block (int n)  {save = compress_all_at_once;  Set_compress_all_at_once(n);}
+  ~Set_compress_all_at_once_Until_end_of_block()       {Set_compress_all_at_once(save);}
+};
+
+// Enable debugging output
+extern int debug_mode;
+void __cdecl Set_debug_mode (int n);
+
+// Load accelerated function either from facompress.dll or facompress_mt.dll
+FARPROC LoadFromDLL (char *funcname, DEFAULT(int only_facompress_mt, FALSE));
+
+// Other compression methods may chain-redefine this callback in order to perform their own cleanup procedures
+extern void (*BeforeUnloadDLL)();
+
+// This function unloads DLLs containing accelerated compression functions
+void UnloadDLL (void);
+
+#ifdef FREEARC_WIN
+extern HINSTANCE hinstUnarcDll;   // unarc.dll instance
+#endif
 
 // This function should cleanup Compression Library
 void compressionLib_cleanup (void);
 
 
 // ****************************************************************************************************************************
-// СЕРВИСЫ СЖАТИЯ И РАСПАКОВКИ ДАННЫХ *****************************************************************************************
+// РЎР•Р Р’РРЎР« РЎР–РђРўРРЇ Р Р РђРЎРџРђРљРћР’РљР Р”РђРќРќР«РҐ *****************************************************************************************
 // ****************************************************************************************************************************
 
-// Распаковать данные, упакованные заданным методом
+enum COMPRESSION {COMPRESS, DECOMPRESS};  // Direction of operation
+
+// Р Р°СЃРїР°РєРѕРІР°С‚СЊ РґР°РЅРЅС‹Рµ, СѓРїР°РєРѕРІР°РЅРЅС‹Рµ Р·Р°РґР°РЅРЅС‹Рј РјРµС‚РѕРґРѕРј РёР»Рё С†РµРїРѕС‡РєРѕР№ РјРµС‚РѕРґРѕРІ
 int Decompress (char *method, CALLBACK_FUNC *callback, void *auxdata);
-// Распаковать данные, сжатые цепочкой методов
-int MultiDecompress (char *method, CALLBACK_FUNC *callback, void *auxdata);
-// Прочитать из входного потока обозначение метода сжатия и распаковать данные этим методом
+// РџСЂРѕС‡РёС‚Р°С‚СЊ РёР· РІС…РѕРґРЅРѕРіРѕ РїРѕС‚РѕРєР° РѕР±РѕР·РЅР°С‡РµРЅРёРµ РјРµС‚РѕРґР° СЃР¶Р°С‚РёСЏ Рё СЂР°СЃРїР°РєРѕРІР°С‚СЊ РґР°РЅРЅС‹Рµ СЌС‚РёРј РјРµС‚РѕРґРѕРј
 int DecompressWithHeader (CALLBACK_FUNC *callback, void *auxdata);
-// Распаковать данные в памяти, записав в выходной буфер не более outputSize байт.
-// Возвращает код ошибки или количество байт, записанных в выходной буфер
+// Р Р°СЃРїР°РєРѕРІР°С‚СЊ РґР°РЅРЅС‹Рµ РІ РїР°РјСЏС‚Рё, Р·Р°РїРёСЃР°РІ РІ РІС‹С…РѕРґРЅРѕР№ Р±СѓС„РµСЂ РЅРµ Р±РѕР»РµРµ outputSize Р±Р°Р№С‚.
+// Р’РѕР·РІСЂР°С‰Р°РµС‚ РєРѕРґ РѕС€РёР±РєРё РёР»Рё РєРѕР»РёС‡РµСЃС‚РІРѕ Р±Р°Р№С‚, Р·Р°РїРёСЃР°РЅРЅС‹С… РІ РІС‹С…РѕРґРЅРѕР№ Р±СѓС„РµСЂ
 int DecompressMem (char *method, void *input, int inputSize, void *output, int outputSize);
 int DecompressMemWithHeader     (void *input, int inputSize, void *output, int outputSize);
 
 #ifndef FREEARC_DECOMPRESS_ONLY
-// Упаковать данные заданным методом
+// РЈРїР°РєРѕРІР°С‚СЊ РґР°РЅРЅС‹Рµ Р·Р°РґР°РЅРЅС‹Рј РјРµС‚РѕРґРѕРј РёР»Рё С†РµРїРѕС‡РєРѕР№ РјРµС‚РѕРґРѕРІ
 int Compress   (char *method, CALLBACK_FUNC *callback, void *auxdata);
-// Записать в выходной поток обозначение метода сжатия и упаковать данные этим методом
+// Р—Р°РїРёСЃР°С‚СЊ РІ РІС‹С…РѕРґРЅРѕР№ РїРѕС‚РѕРє РѕР±РѕР·РЅР°С‡РµРЅРёРµ РјРµС‚РѕРґР° СЃР¶Р°С‚РёСЏ Рё СѓРїР°РєРѕРІР°С‚СЊ РґР°РЅРЅС‹Рµ СЌС‚РёРј РјРµС‚РѕРґРѕРј
 int CompressWithHeader (char *method, CALLBACK_FUNC *callback, void *auxdata);
-// Упаковать данные в памяти, записав в выходной буфер не более outputSize байт.
-// Возвращает код ошибки или количество байт, записанных в выходной буфер
+// РЈРїР°РєРѕРІР°С‚СЊ РґР°РЅРЅС‹Рµ РІ РїР°РјСЏС‚Рё, Р·Р°РїРёСЃР°РІ РІ РІС‹С…РѕРґРЅРѕР№ Р±СѓС„РµСЂ РЅРµ Р±РѕР»РµРµ outputSize Р±Р°Р№С‚.
+// Р’РѕР·РІСЂР°С‰Р°РµС‚ РєРѕРґ РѕС€РёР±РєРё РёР»Рё РєРѕР»РёС‡РµСЃС‚РІРѕ Р±Р°Р№С‚, Р·Р°РїРёСЃР°РЅРЅС‹С… РІ РІС‹С…РѕРґРЅРѕР№ Р±СѓС„РµСЂ
 int CompressMem           (char *method, void *input, int inputSize, void *output, int outputSize);
 int CompressMemWithHeader (char *method, void *input, int inputSize, void *output, int outputSize);
-// Вывести в out_method каноническое представление метода сжатия in_method (выполнить ParseCompressionMethod + ShowCompressionMethod)
-int CanonizeCompressionMethod (char *in_method, char *out_method);
-// Информация о памяти, необходимой для упаковки/распаковки, размере словаря и размере блока.
-MemSize GetCompressionMem   (char *method);
-MemSize GetDictionary       (char *method);
-MemSize GetBlockSize        (char *method);
-// Возвратить в out_method новый метод сжатия, настроенный на использование
-// соответствующего количества памяти/словаря/размера блока
-int SetCompressionMem   (char *in_method, MemSize mem,  char *out_method);
-int SetDecompressionMem (char *in_method, MemSize mem,  char *out_method);
-int SetDictionary       (char *in_method, MemSize dict, char *out_method);
-int SetBlockSize        (char *in_method, MemSize bs,   char *out_method);
-// Возвратить в out_method новый метод сжатия, уменьшив, если необходимо,
-// используемую алгоритмом память / его словарь / размер блока
-int LimitCompressionMem   (char *in_method, MemSize mem,  char *out_method);
-int LimitDecompressionMem (char *in_method, MemSize mem,  char *out_method);
-int LimitDictionary       (char *in_method, MemSize dict, char *out_method);
-int LimitBlockSize        (char *in_method, MemSize bs,   char *out_method);
+// РРЅС„РѕСЂРјР°С†РёСЏ Рѕ РїР°РјСЏС‚Рё, РЅРµРѕР±С…РѕРґРёРјРѕР№ РґР»СЏ СѓРїР°РєРѕРІРєРё/СЂР°СЃРїР°РєРѕРІРєРё, СЂР°Р·РјРµСЂРµ СЃР»РѕРІР°СЂСЏ Рё СЂР°Р·РјРµСЂРµ Р±Р»РѕРєР°.
+MemSize GetCompressionMem      (char *method);
+MemSize GetMinCompressionMem   (char *method);
+MemSize GetMinDecompressionMem (char *method);
+// Р’РѕР·РІСЂР°С‚РёС‚СЊ РІ out_method РЅРѕРІС‹Р№ РјРµС‚РѕРґ СЃР¶Р°С‚РёСЏ, РЅР°СЃС‚СЂРѕРµРЅРЅС‹Р№ РЅР° РёСЃРїРѕР»СЊР·РѕРІР°РЅРёРµ
+// СЃРѕРѕС‚РІРµС‚СЃС‚РІСѓСЋС‰РµРіРѕ РєРѕР»РёС‡РµСЃС‚РІР° РїР°РјСЏС‚Рё/СЃР»РѕРІР°СЂСЏ/СЂР°Р·РјРµСЂР° Р±Р»РѕРєР°
+int SetCompressionMem          (char *in_method, MemSize mem,  char *out_method);
+int SetMinDecompressionMem     (char *in_method, MemSize mem,  char *out_method);
+int SetDictionary              (char *in_method, MemSize dict, char *out_method);
+int SetBlockSize               (char *in_method, MemSize bs,   char *out_method);
+// Р’РѕР·РІСЂР°С‚РёС‚СЊ РІ out_method РЅРѕРІС‹Р№ РјРµС‚РѕРґ СЃР¶Р°С‚РёСЏ, СѓРјРµРЅСЊС€РёРІ, РµСЃР»Рё РЅРµРѕР±С…РѕРґРёРјРѕ,
+// РёСЃРїРѕР»СЊР·СѓРµРјСѓСЋ Р°Р»РіРѕСЂРёС‚РјРѕРј РїР°РјСЏС‚СЊ / РµРіРѕ СЃР»РѕРІР°СЂСЊ / СЂР°Р·РјРµСЂ Р±Р»РѕРєР°
+int LimitCompressionMem        (char *in_method, MemSize mem,  char *out_method);
+int LimitMinDecompressionMem   (char *in_method, MemSize mem,  char *out_method);
+int LimitDictionary            (char *in_method, MemSize dict, char *out_method);
+int LimitBlockSize             (char *in_method, MemSize bs,   char *out_method);
 #endif
-MemSize GetDecompressionMem (char *method);
+MemSize GetDictionary          (char *method);
+MemSize GetBlockSize           (char *method);
+MemSize GetDecompressionMem    (char *method);
+int     SetDecompressionMem    (char *in_method, MemSize mem,  char *out_method);
+int     LimitDecompressionMem  (char *in_method, MemSize mem,  char *out_method);
 
-// Функция "(рас)паковки", копирующая данные один в один
+// Р’С‹РІРµСЃС‚Рё РІ out_method РєР°РЅРѕРЅРёС‡РµСЃРєРѕРµ РїСЂРµРґСЃС‚Р°РІР»РµРЅРёРµ РјРµС‚РѕРґР° СЃР¶Р°С‚РёСЏ in_method (РІС‹РїРѕР»РЅРёС‚СЊ ParseCompressionMethod + ShowCompressionMethod)
+//   purify!=0: РїРѕРґРіРѕС‚РѕРІРёС‚СЊ РїСЂРµРґСЃС‚Р°РІР»РµРЅРёРµ method Рє Р·Р°РїРёСЃРё РІ Р°СЂС…РёРІ (РЅР°РїСЂРёРјРµСЂ, СѓР±СЂР°С‚СЊ :t:i РґР»СЏ 4x4)
+int CanonizeCompressionMethod (char *in_method, char *out_method, int purify);
+
+// Р¤СѓРЅРєС†РёСЏ "(СЂР°СЃ)РїР°РєРѕРІРєРё", РєРѕРїРёСЂСѓСЋС‰Р°СЏ РґР°РЅРЅС‹Рµ РѕРґРёРЅ РІ РѕРґРёРЅ
 int copy_data   (CALLBACK_FUNC *callback, void *auxdata);
 
 
 // ****************************************************************************************************************************
-// КЛАСС, РЕАЛИЗУЮЩИЙ ИНТЕРФЕЙС К МЕТОДУ СЖАТИЯ *******************************************************************************
+// РљР›РђРЎРЎ, Р Р•РђР›РР—РЈР®Р©РР™ РРќРўР•Р Р¤Р•Р™РЎ Рљ РњР•РўРћР”РЈ РЎР–РђРўРРЇ *******************************************************************************
 // ****************************************************************************************************************************
 
 #ifdef __cplusplus
 
-// Абстрактный интерфейс к произвольному методу сжатия
+// РђР±СЃС‚СЂР°РєС‚РЅС‹Р№ РёРЅС‚РµСЂС„РµР№СЃ Рє РїСЂРѕРёР·РІРѕР»СЊРЅРѕРјСѓ РјРµС‚РѕРґСѓ СЃР¶Р°С‚РёСЏ
 class COMPRESSION_METHOD
 {
 public:
-  // Функции распаковки и упаковки
+  // Р¤СѓРЅРєС†РёРё СЂР°СЃРїР°РєРѕРІРєРё Рё СѓРїР°РєРѕРІРєРё
+  //   DeCompressMem can either compress or decompress, either from memory block `input` to `output` or calling `callback` for I/O.
+  //   CodecState, unless NULL, points to the place for storing pointer to persistent codec state, such as allocated buffers
+  //     and precomputed tables, that should be finally freed by the empty DeCompressMem() call.
+  virtual int DeCompressMem (COMPRESSION direction, void *input, int inputSize, void *output, int *outputSize, CALLBACK_FUNC *callback=0, void *auxdata=0, void **CodecState=0);
   virtual int decompress (CALLBACK_FUNC *callback, void *auxdata) = 0;
 #ifndef FREEARC_DECOMPRESS_ONLY
   virtual int compress   (CALLBACK_FUNC *callback, void *auxdata) = 0;
 
-  // Записать в buf[MAX_METHOD_STRLEN] строку, описывающую метод сжатия и его параметры (функция, обратная к ParseCompressionMethod)
-  virtual void ShowCompressionMethod (char *buf) = 0;
-
-  // Информация о памяти, необходимой для упаковки/распаковки,
-  // размере словаря (то есть насколько далеко заглядывает алгоритм в поиске похожих данных - для lz/bs схем),
-  // и размере блока (то есть сколько максимум данных имеет смысл помещать в один солид-блок - для bs схем и lzp)
-  virtual MemSize GetCompressionMem   (void)         = 0;
-  virtual MemSize GetDictionary       (void)         = 0;
-  virtual MemSize GetBlockSize        (void)         = 0;
-  // Настроить метод сжатия на использование заданного кол-ва памяти, словаря или размера блока
-  virtual void    SetCompressionMem   (MemSize mem)  = 0;
-  virtual void    SetDecompressionMem (MemSize mem)  = 0;
-  virtual void    SetDictionary       (MemSize dict) = 0;
-  virtual void    SetBlockSize        (MemSize bs)   = 0;
-  // Ограничить используемую при упаковке/распаковке память, или словарь / размер блока
-  void LimitCompressionMem   (MemSize mem)  {if (GetCompressionMem()   > mem)   SetCompressionMem(mem);}
-  void LimitDecompressionMem (MemSize mem)  {if (GetDecompressionMem() > mem)   SetDecompressionMem(mem);}
-  void LimitDictionary       (MemSize dict) {if (GetDictionary()       > dict)  SetDictionary(dict);}
-  void LimitBlockSize        (MemSize bs)   {if (GetBlockSize()        > bs)    SetBlockSize(bs);}
+  // РРЅС„РѕСЂРјР°С†РёСЏ Рѕ РїР°РјСЏС‚Рё, РЅРµРѕР±С…РѕРґРёРјРѕР№ РґР»СЏ СѓРїР°РєРѕРІРєРё/СЂР°СЃРїР°РєРѕРІРєРё (Min - РїСЂРё :t1:i0, С‚.Рµ. РјРёРЅРёРјР°Р»СЊРЅРѕРј С‡РёСЃР»Рµ С‚СЂРµРґРѕРІ/Р±СѓС„РµСЂРѕРІ - РґР»СЏ ArcInfo Рё С‚.Рї.),
+  // СЂР°Р·РјРµСЂРµ СЃР»РѕРІР°СЂСЏ (С‚Рѕ РµСЃС‚СЊ РЅР°СЃРєРѕР»СЊРєРѕ РґР°Р»РµРєРѕ Р·Р°РіР»СЏРґС‹РІР°РµС‚ Р°Р»РіРѕСЂРёС‚Рј РІ РїРѕРёСЃРєРµ РїРѕС…РѕР¶РёС… РґР°РЅРЅС‹С… - РґР»СЏ lz/bs СЃС…РµРј),
+  // Рё СЂР°Р·РјРµСЂРµ Р±Р»РѕРєР° (С‚Рѕ РµСЃС‚СЊ СЃРєРѕР»СЊРєРѕ РјР°РєСЃРёРјСѓРј РґР°РЅРЅС‹С… РёРјРµРµС‚ СЃРјС‹СЃР» РїРѕРјРµС‰Р°С‚СЊ РІ РѕРґРёРЅ СЃРѕР»РёРґ-Р±Р»РѕРє - РґР»СЏ bs СЃС…РµРј Рё lzp)
+  virtual MemSize GetCompressionMem        (void)         = 0;
+  virtual MemSize GetMinCompressionMem     (void)               {return GetCompressionMem();}
+  virtual MemSize GetMinDecompressionMem   (void)               {return GetDecompressionMem();}
+  // РќР°СЃС‚СЂРѕРёС‚СЊ РјРµС‚РѕРґ СЃР¶Р°С‚РёСЏ РЅР° РёСЃРїРѕР»СЊР·РѕРІР°РЅРёРµ Р·Р°РґР°РЅРЅРѕРіРѕ РєРѕР»-РІР° РїР°РјСЏС‚Рё, СЃР»РѕРІР°СЂСЏ РёР»Рё СЂР°Р·РјРµСЂР° Р±Р»РѕРєР°
+  virtual void    SetDictionary            (MemSize dict)       {}
+  virtual void    SetBlockSize             (MemSize bs)         {}
+  virtual void    SetCompressionMem        (MemSize mem)  = 0;
+  virtual void    SetMinDecompressionMem   (MemSize mem)  = 0;  // РґР»СЏ -ld РїСЂРё СѓРїР°РєРѕРІРєРµ (С‚.Рµ. РїСЂРё :t1:i0): РЅР°СЃС‚СЂР°РёРІР°РµРј РјРёРЅРёРјР°Р»СЊРЅС‹Р№ РѕР±СЉС‘Рј РїР°РјСЏС‚Рё, С‚СЂРµР±СѓРµРјС‹Р№ РґР»СЏ СЂР°СЃРїР°РєРѕРІРєРё
+  // РћРіСЂР°РЅРёС‡РёС‚СЊ РёСЃРїРѕР»СЊР·СѓРµРјСѓСЋ РїСЂРё СѓРїР°РєРѕРІРєРµ/СЂР°СЃРїР°РєРѕРІРєРµ РїР°РјСЏС‚СЊ, РёР»Рё СЃР»РѕРІР°СЂСЊ / СЂР°Р·РјРµСЂ Р±Р»РѕРєР°
+  virtual void    LimitDictionary          (MemSize dict)       {if (dict>0 && GetDictionary()          > dict)  SetDictionary(dict);}
+  virtual void    LimitBlockSize           (MemSize bs)         {if (bs>0   && GetBlockSize()           > bs)    SetBlockSize(bs);}
+  virtual void    LimitCompressionMem      (MemSize mem)        {if (mem>0  && GetCompressionMem()      > mem)   SetCompressionMem(mem);}
+  virtual void    LimitMinDecompressionMem (MemSize mem)        {if (mem>0  && GetMinDecompressionMem() > mem)   SetMinDecompressionMem(mem);}
 #endif
-  virtual MemSize GetDecompressionMem (void)         = 0;
+  virtual MemSize GetDictionary            (void)               {return 0;}
+  virtual MemSize GetBlockSize             (void)               {return 0;}
+  virtual MemSize GetAlgoMem               (void);                            // РћР±СЉС‘Рј РїР°РјСЏС‚Рё, С…Р°СЂР°РєС‚РµСЂРёР·СѓСЋС‰РёР№ Р°Р»РіРѕСЂРёС‚Рј
+  virtual MemSize GetDecompressionMem      (void)         = 0;
+  virtual void    SetDecompressionMem      (MemSize mem)        {}    // РґР»СЏ -ld РїСЂРё СЂР°СЃРїР°РєРѕРІРєРµ (С‚.Рµ. РјРµРЅСЏРµРј С‚РѕР»СЊРєРѕ РїР°СЂР°РјРµС‚СЂС‹ С‚РёРїР° :t:i, СЃРѕС…СЂР°РЅСЏСЏ СЃРѕРІРјРµСЃС‚РёРјРѕСЃС‚СЊ СЃ СѓРїР°РєРѕРІР°РЅРЅС‹РјРё РґР°РЅРЅС‹РјРё)
+  virtual void    LimitDecompressionMem    (MemSize mem)        {if (mem>0  && GetDecompressionMem() > mem)   SetDecompressionMem(mem);}
 
-  // Универсальный метод. Параметры:
+  // Maximum possible inflation of incompressible input data
+  virtual LongMemSize GetMaxCompressedSize (LongMemSize insize) {return insize + (insize/4) + 16*kb;}
+
+  // Р—Р°РїРёСЃР°С‚СЊ РІ buf[MAX_METHOD_STRLEN] СЃС‚СЂРѕРєСѓ, РѕРїРёСЃС‹РІР°СЋС‰СѓСЋ РјРµС‚РѕРґ СЃР¶Р°С‚РёСЏ Рё РµРіРѕ РїР°СЂР°РјРµС‚СЂС‹ (С„СѓРЅРєС†РёСЏ, РѕР±СЂР°С‚РЅР°СЏ Рє ParseCompressionMethod)
+  virtual void ShowCompressionMethod (char *buf, bool purify) = 0;
+
+  // РЈРЅРёРІРµСЂСЃР°Р»СЊРЅС‹Р№ РјРµС‚РѕРґ. РџР°СЂР°РјРµС‚СЂС‹:
   //   what: "compress", "decompress", "setCompressionMem", "limitDictionary"...
-  //   data: данные для операции в формате, зависящем от конкретной выполняемой операции
-  //   param&result: простой числовой параметр, что достаточно для многих информационных операций
-  // Неиспользуемые параметры устанавливаются в NULL/0. result<0 - код ошибки
+  //   data: РґР°РЅРЅС‹Рµ РґР»СЏ РѕРїРµСЂР°С†РёРё РІ С„РѕСЂРјР°С‚Рµ, Р·Р°РІРёСЃСЏС‰РµРј РѕС‚ РєРѕРЅРєСЂРµС‚РЅРѕР№ РІС‹РїРѕР»РЅСЏРµРјРѕР№ РѕРїРµСЂР°С†РёРё
+  //   param&result: РїСЂРѕСЃС‚РѕР№ С‡РёСЃР»РѕРІРѕР№ РїР°СЂР°РјРµС‚СЂ, С‡С‚Рѕ РґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РґР»СЏ РјРЅРѕРіРёС… РёРЅС„РѕСЂРјР°С†РёРѕРЅРЅС‹С… РѕРїРµСЂР°С†РёР№
+  // РќРµРёСЃРїРѕР»СЊР·СѓРµРјС‹Рµ РїР°СЂР°РјРµС‚СЂС‹ СѓСЃС‚Р°РЅР°РІР»РёРІР°СЋС‚СЃСЏ РІ NULL/0. result<0 - РєРѕРґ РѕС€РёР±РєРё
   virtual int doit (char *what, int param, void *data, CALLBACK_FUNC *callback);
 
-  double addtime;  // Дополнительное время, потраченное на сжатие (во внешних программах, дополнительных threads и т.д.)
+  // Check boolean method property
+  bool is (char *request)   {return doit (request, 0, NULL, NULL) > 0;}
+
+  double addtime;  // Р”РѕРїРѕР»РЅРёС‚РµР»СЊРЅРѕРµ РІСЂРµРјСЏ, РїРѕС‚СЂР°С‡РµРЅРЅРѕРµ РЅР° СЃР¶Р°С‚РёРµ (РІРѕ РІРЅРµС€РЅРёС… РїСЂРѕРіСЂР°РјРјР°С…, РґРѕРїРѕР»РЅРёС‚РµР»СЊРЅС‹С… threads Рё С‚.Рґ.)
   COMPRESSION_METHOD() {addtime=0;}
   virtual ~COMPRESSION_METHOD() {}
-//  Debugging code:  char buf[100]; ShowCompressionMethod(buf); printf("%s : %u => %u\n", buf, GetCompressionMem(), mem);
+//  Debugging code:  char buf[100]; ShowCompressionMethod(buf,FALSE); printf("%s : %u => %u\n", buf, GetCompressionMem(), mem);
 };
 
 
 // ****************************************************************************************************************************
-// ФАБРИКА COMPRESSION_METHOD *************************************************************************************************
+// Р¤РђР‘Р РРљРђ COMPRESSION_METHOD *************************************************************************************************
 // ****************************************************************************************************************************
 
-// Сконструировать объект класса - наследника COMPRESSION_METHOD,
-// реализующий метод сжатия, заданный в виде строки `method`
+// РЎРєРѕРЅСЃС‚СЂСѓРёСЂРѕРІР°С‚СЊ РѕР±СЉРµРєС‚ РєР»Р°СЃСЃР° - РЅР°СЃР»РµРґРЅРёРєР° COMPRESSION_METHOD,
+// СЂРµР°Р»РёР·СѓСЋС‰РёР№ РјРµС‚РѕРґ СЃР¶Р°С‚РёСЏ, Р·Р°РґР°РЅРЅС‹Р№ РІ РІРёРґРµ СЃС‚СЂРѕРєРё `method`
 COMPRESSION_METHOD *ParseCompressionMethod (char* method);
 
 typedef COMPRESSION_METHOD* (*CM_PARSER) (char** parameters);
 typedef COMPRESSION_METHOD* (*CM_PARSER2) (char** parameters, void *data);
-int AddCompressionMethod         (CM_PARSER parser);  // Добавить парсер нового метода в список поддерживаемых методов сжатия
-int AddExternalCompressionMethod (CM_PARSER2 parser2, void *data);  // Добавить парсер внешнего метода сжатия с дополнительным параметром, который должен быть передан этому парсеру
+int AddCompressionMethod         (CM_PARSER parser);  // Р”РѕР±Р°РІРёС‚СЊ РїР°СЂСЃРµСЂ РЅРѕРІРѕРіРѕ РјРµС‚РѕРґР° РІ СЃРїРёСЃРѕРє РїРѕРґРґРµСЂР¶РёРІР°РµРјС‹С… РјРµС‚РѕРґРѕРІ СЃР¶Р°С‚РёСЏ
+int AddExternalCompressionMethod (CM_PARSER2 parser2, void *data);  // Р”РѕР±Р°РІРёС‚СЊ РїР°СЂСЃРµСЂ РІРЅРµС€РЅРµРіРѕ РјРµС‚РѕРґР° СЃР¶Р°С‚РёСЏ СЃ РґРѕРїРѕР»РЅРёС‚РµР»СЊРЅС‹Рј РїР°СЂР°РјРµС‚СЂРѕРј, РєРѕС‚РѕСЂС‹Р№ РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ РїРµСЂРµРґР°РЅ СЌС‚РѕРјСѓ РїР°СЂСЃРµСЂСѓ
 #endif  // __cplusplus
-void ClearExternalCompressorsTable (void);                          // Очистить таблицу внешних упаковщиков
+void ClearExternalCompressorsTable (void);                          // РћС‡РёСЃС‚РёС‚СЊ С‚Р°Р±Р»РёС†Сѓ РІРЅРµС€РЅРёС… СѓРїР°РєРѕРІС‰РёРєРѕРІ
 #ifdef __cplusplus
 
 
 // ****************************************************************************************************************************
-// МЕТОД "СЖАТИЯ" STORING *****************************************************************************************************
+// РњР•РўРћР” "РЎР–РђРўРРЇ" STORING *****************************************************************************************************
 // ****************************************************************************************************************************
 
-// Реализация метода "сжатия" STORING
+// Р РµР°Р»РёР·Р°С†РёСЏ РјРµС‚РѕРґР° "СЃР¶Р°С‚РёСЏ" STORING
 class STORING_METHOD : public COMPRESSION_METHOD
 {
 public:
-  // Функции распаковки и упаковки
+  // Р¤СѓРЅРєС†РёРё СЂР°СЃРїР°РєРѕРІРєРё Рё СѓРїР°РєРѕРІРєРё
   virtual int decompress (CALLBACK_FUNC *callback, void *auxdata);
 #ifndef FREEARC_DECOMPRESS_ONLY
   virtual int compress   (CALLBACK_FUNC *callback, void *auxdata);
 
-  // Записать в buf[MAX_METHOD_STRLEN] строку, описывающую метод сжатия (функция, обратная к parse_STORING)
-  virtual void ShowCompressionMethod (char *buf);
-
-  // Получить/установить объём памяти, используемой при упаковке/распаковке, размер словаря или размер блока
-  virtual MemSize GetCompressionMem   (void)    {return BUFFER_SIZE;}
-  virtual MemSize GetDictionary       (void)    {return 0;}
-  virtual MemSize GetBlockSize        (void)    {return 0;}
-  virtual void    SetCompressionMem   (MemSize) {}
-  virtual void    SetDecompressionMem (MemSize) {}
-  virtual void    SetDictionary       (MemSize) {}
-  virtual void    SetBlockSize        (MemSize) {}
+  // РџРѕР»СѓС‡РёС‚СЊ/СѓСЃС‚Р°РЅРѕРІРёС‚СЊ РѕР±СЉС‘Рј РїР°РјСЏС‚Рё, РёСЃРїРѕР»СЊР·СѓРµРјРѕР№ РїСЂРё СѓРїР°РєРѕРІРєРµ/СЂР°СЃРїР°РєРѕРІРєРµ
+  virtual MemSize GetCompressionMem        (void)               {return BUFFER_SIZE;}
+  virtual void    SetCompressionMem        (MemSize)            {}
+  virtual void    SetMinDecompressionMem   (MemSize)            {}
 #endif
-  virtual MemSize GetDecompressionMem (void)    {return BUFFER_SIZE;}
+  virtual MemSize GetDecompressionMem      (void)               {return BUFFER_SIZE;}
+
+  // Р—Р°РїРёСЃР°С‚СЊ РІ buf[MAX_METHOD_STRLEN] СЃС‚СЂРѕРєСѓ, РѕРїРёСЃС‹РІР°СЋС‰СѓСЋ РјРµС‚РѕРґ СЃР¶Р°С‚РёСЏ (С„СѓРЅРєС†РёСЏ, РѕР±СЂР°С‚РЅР°СЏ Рє parse_STORING)
+  virtual void ShowCompressionMethod (char *buf, bool purify)   {sprintf (buf, "storing");}
 };
 
-// Разборщик строки метода сжатия STORING
+// Р Р°Р·Р±РѕСЂС‰РёРє СЃС‚СЂРѕРєРё РјРµС‚РѕРґР° СЃР¶Р°С‚РёСЏ STORING
 COMPRESSION_METHOD* parse_STORING (char** parameters);
+
+
+// ****************************************************************************************************************************
+// РњР•РўРћР” "РЎР–РђРўРРЇ" CRC: С‡РёС‚Р°РµРј РґР°РЅРЅС‹Рµ Рё РЅРёС‡РµРіРѕ РЅРµ РїРёС€РµРј ************************************************************************
+// ****************************************************************************************************************************
+
+// Р РµР°Р»РёР·Р°С†РёСЏ РјРµС‚РѕРґР° "СЃР¶Р°С‚РёСЏ" crc
+class CRC_METHOD : public COMPRESSION_METHOD
+{
+public:
+  // Р¤СѓРЅРєС†РёРё СЂР°СЃРїР°РєРѕРІРєРё Рё СѓРїР°РєРѕРІРєРё
+  virtual int decompress (CALLBACK_FUNC *callback, void *auxdata) {return FREEARC_ERRCODE_INTERNAL;}
+#ifndef FREEARC_DECOMPRESS_ONLY
+  virtual int compress   (CALLBACK_FUNC *callback, void *auxdata);
+
+  // РџРѕР»СѓС‡РёС‚СЊ/СѓСЃС‚Р°РЅРѕРІРёС‚СЊ РѕР±СЉС‘Рј РїР°РјСЏС‚Рё, РёСЃРїРѕР»СЊР·СѓРµРјРѕР№ РїСЂРё СѓРїР°РєРѕРІРєРµ/СЂР°СЃРїР°РєРѕРІРєРµ
+  virtual MemSize GetCompressionMem        (void)               {return BUFFER_SIZE;}
+  virtual void    SetCompressionMem        (MemSize)            {}
+  virtual void    SetMinDecompressionMem   (MemSize)            {}
+#endif
+  virtual MemSize GetDecompressionMem      (void)               {return BUFFER_SIZE;}
+
+  // Р—Р°РїРёСЃР°С‚СЊ РІ buf[MAX_METHOD_STRLEN] СЃС‚СЂРѕРєСѓ, РѕРїРёСЃС‹РІР°СЋС‰СѓСЋ РјРµС‚РѕРґ СЃР¶Р°С‚РёСЏ (С„СѓРЅРєС†РёСЏ, РѕР±СЂР°С‚РЅР°СЏ Рє parse_CRC)
+  virtual void ShowCompressionMethod (char *buf, bool purify)   {sprintf (buf, "crc");}
+};
+
+// Р Р°Р·Р±РѕСЂС‰РёРє СЃС‚СЂРѕРєРё РјРµС‚РѕРґР° "СЃР¶Р°С‚РёСЏ" crc
+COMPRESSION_METHOD* parse_CRC (char** parameters);
+
+
+// ****************************************************************************************************************************
+// РњР•РўРћР” "РЎР–РђРўРРЇ" FAKE: РЅРµ С‡РёС‚Р°РµРј РґР°РЅРЅС‹Рµ Рё РЅРёС‡РµРіРѕ РЅРµ РїРёС€РµРј ********************************************************************
+// ****************************************************************************************************************************
+
+// Р РµР°Р»РёР·Р°С†РёСЏ РјРµС‚РѕРґР° "СЃР¶Р°С‚РёСЏ" fake
+class FAKE_METHOD : public COMPRESSION_METHOD
+{
+public:
+  // Р¤СѓРЅРєС†РёРё СЂР°СЃРїР°РєРѕРІРєРё Рё СѓРїР°РєРѕРІРєРё
+  virtual int decompress (CALLBACK_FUNC *callback, void *auxdata) {return FREEARC_ERRCODE_INTERNAL;}
+#ifndef FREEARC_DECOMPRESS_ONLY
+  virtual int compress   (CALLBACK_FUNC *callback, void *auxdata) {return FREEARC_ERRCODE_INTERNAL;}
+
+  // РџРѕР»СѓС‡РёС‚СЊ/СѓСЃС‚Р°РЅРѕРІРёС‚СЊ РѕР±СЉС‘Рј РїР°РјСЏС‚Рё, РёСЃРїРѕР»СЊР·СѓРµРјРѕР№ РїСЂРё СѓРїР°РєРѕРІРєРµ/СЂР°СЃРїР°РєРѕРІРєРµ
+  virtual MemSize GetCompressionMem        (void)               {return BUFFER_SIZE;}
+  virtual void    SetCompressionMem        (MemSize)            {}
+  virtual void    SetMinDecompressionMem   (MemSize)            {}
+#endif
+  virtual MemSize GetDecompressionMem      (void)               {return BUFFER_SIZE;}
+
+  // Р—Р°РїРёСЃР°С‚СЊ РІ buf[MAX_METHOD_STRLEN] СЃС‚СЂРѕРєСѓ, РѕРїРёСЃС‹РІР°СЋС‰СѓСЋ РјРµС‚РѕРґ СЃР¶Р°С‚РёСЏ (С„СѓРЅРєС†РёСЏ, РѕР±СЂР°С‚РЅР°СЏ Рє parse_FAKE)
+  virtual void ShowCompressionMethod (char *buf, bool purify)   {sprintf (buf, "fake");}
+};
+
+// Р Р°Р·Р±РѕСЂС‰РёРє СЃС‚СЂРѕРєРё РјРµС‚РѕРґР° СЃР¶Р°С‚РёСЏ STORING
+COMPRESSION_METHOD* parse_FAKE (char** parameters);
 
 #endif  // __cplusplus
 
+
+// ****************************************************************************************************************************
+// (De)compress data from memory buffer (input) to another memory buffer (output)                                             *
+// ****************************************************************************************************************************
+
+// РЎС‚СЂСѓРєС‚СѓСЂР°, С…СЂР°РЅСЏС‰Р°СЏ РїРѕР·РёС†РёСЋ РІ Р±СѓС„РµСЂР°С… С‡С‚РµРЅРёСЏ/Р·Р°РїРёСЃРё РїСЂРё СѓРїР°РєРѕРІРєРµ/СЂР°СЃРїР°РєРѕРІРєРµ РІ РїР°РјСЏС‚Рё
+struct MemBuf
+{
+  MemBuf (void *input, int inputSize, void *output, int outputSize, CALLBACK_FUNC *_callback=0, void *_auxdata=0)
+  {
+    readPtr=(BYTE*)input, readLeft=inputSize, writePtr=(BYTE*)output, writeLeft=writeBufferSize=outputSize, callback=_callback, auxdata=_auxdata;
+  }
+
+  // РЎРєРѕР»СЊРєРѕ РґР°РЅРЅС‹С… Р±С‹Р»Рѕ Р·Р°РїРёСЃР°РЅРѕ РІ Р±СѓС„РµСЂ
+  int written()  {return writeBufferSize-writeLeft;}
+
+  BYTE *readPtr;          // С‚РµРєСѓС‰Р°СЏ РїРѕР·РёС†РёСЏ С‡РёС‚Р°РµРјС‹С… РґР°РЅРЅС‹С… (NULL, РµСЃР»Рё РЅР°РґРѕ С‡РёС‚Р°С‚СЊ РґР°РЅРЅС‹Рµ С‡РµСЂРµР· callback)
+  int   readLeft;         // СЃРєРѕР»СЊРєРѕ Р±Р°Р№С‚ РµС‰С‘ РѕСЃС‚Р°Р»РѕСЃСЊ РІРѕ РІС…РѕРґРЅРѕРј Р±СѓС„РµСЂРµ
+  BYTE *writePtr;         // С‚РµРєСѓС‰Р°СЏ РїРѕР·РёС†РёСЏ Р·Р°РїРёСЃС‹РІР°РµРјС‹С… РґР°РЅРЅС‹С… (NULL, РµСЃР»Рё РЅР°РґРѕ Р·Р°РїРёСЃС‹РІР°С‚СЊ РґР°РЅРЅС‹Рµ С‡РµСЂРµР· callback)
+  int   writeLeft;        // СЃРєРѕР»СЊРєРѕ Р±Р°Р№С‚ РµС‰С‘ РѕСЃС‚Р°Р»РѕСЃСЊ РІ РІС‹С…РѕРґРЅРѕРј Р±СѓС„РµСЂРµ
+  int   writeBufferSize;  // РїРѕР»РЅС‹Р№ СЂР°Р·РјРµСЂ РІС‹С…РѕРґРЅРѕРіРѕ Р±СѓС„РµСЂР°
+  CALLBACK_FUNC *callback;
+  void *auxdata;
+};
+
+// Callback-С„СѓРЅРєС†РёСЏ С‡С‚РµРЅРёСЏ/Р·Р°РїРёСЃРё РґР»СЏ (СЂР°СЃ)РїР°РєРѕРІРєРё РІ РїР°РјСЏС‚Рё
+int ReadWriteMem (const char *what, void *buf, int size, void *_membuf);
 
 
 // ****************************************************************************************************************************
